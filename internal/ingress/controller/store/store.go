@@ -29,6 +29,7 @@ import (
 
 	"github.com/eapache/channels"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -79,6 +80,9 @@ type Storer interface {
 	// GetServiceEndpoints returns the Endpoints of a Service matching key.
 	GetServiceEndpoints(key string) (*corev1.Endpoints, error)
 
+	// GetServiceEndpointSlices returns the EndpointSlices of a Service matching key.
+	GetServiceEndpointSlices(key string) ([]*discoveryv1.EndpointSlice, error)
+
 	// ListIngresses returns a list of all Ingresses in the store.
 	ListIngresses() []*ingress.Ingress
 
@@ -122,13 +126,14 @@ type Event struct {
 
 // Informer defines the required SharedIndexInformers that interact with the API server.
 type Informer struct {
-	Ingress      cache.SharedIndexInformer
-	IngressClass cache.SharedIndexInformer
-	Endpoint     cache.SharedIndexInformer
-	Service      cache.SharedIndexInformer
-	Secret       cache.SharedIndexInformer
-	ConfigMap    cache.SharedIndexInformer
-	Namespace    cache.SharedIndexInformer
+	Ingress       cache.SharedIndexInformer
+	IngressClass  cache.SharedIndexInformer
+	Endpoint      cache.SharedIndexInformer
+	EndpointSlice cache.SharedIndexInformer
+	Service       cache.SharedIndexInformer
+	Secret        cache.SharedIndexInformer
+	ConfigMap     cache.SharedIndexInformer
+	Namespace     cache.SharedIndexInformer
 }
 
 // Lister contains object listers (stores).
@@ -137,6 +142,7 @@ type Lister struct {
 	IngressClass          IngressClassLister
 	Service               ServiceLister
 	Endpoint              EndpointLister
+	EndpointSlice         EndpointSliceLister
 	Secret                SecretLister
 	ConfigMap             ConfigMapLister
 	Namespace             NamespaceLister
@@ -155,6 +161,7 @@ func (e NotExistsError) Error() string {
 func (i *Informer) Run(stopCh chan struct{}) {
 	go i.Secret.Run(stopCh)
 	go i.Endpoint.Run(stopCh)
+	go i.EndpointSlice.Run(stopCh)
 	if i.IngressClass != nil {
 		go i.IngressClass.Run(stopCh)
 	}
@@ -165,6 +172,7 @@ func (i *Informer) Run(stopCh chan struct{}) {
 	// from the queue
 	if !cache.WaitForCacheSync(stopCh,
 		i.Endpoint.HasSynced,
+		i.EndpointSlice.HasSynced,
 		i.Service.HasSynced,
 		i.Secret.HasSynced,
 		i.ConfigMap.HasSynced,
@@ -326,6 +334,9 @@ func New(
 
 	store.informers.Endpoint = infFactory.Core().V1().Endpoints().Informer()
 	store.listers.Endpoint.Store = store.informers.Endpoint.GetStore()
+
+	store.informers.EndpointSlice = infFactory.Discovery().V1().EndpointSlices().Informer()
+	store.listers.EndpointSlice.Store = store.informers.EndpointSlice.GetStore()
 
 	store.informers.Secret = infFactorySecrets.Core().V1().Secrets().Informer()
 	store.listers.Secret.Store = store.informers.Secret.GetStore()
@@ -679,6 +690,32 @@ func New(
 		},
 	}
 
+	epsEventHandler := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			updateCh.In() <- Event{
+				Type: CreateEvent,
+				Obj:  obj,
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			oldEps := oldObj.(*discoveryv1.EndpointSlice)
+			newEps := newObj.(*discoveryv1.EndpointSlice)
+			if !reflect.DeepEqual(oldEps.Endpoints, newEps.Endpoints) ||
+				!reflect.DeepEqual(oldEps.Ports, newEps.Ports) {
+				updateCh.In() <- Event{
+					Type: UpdateEvent,
+					Obj:  newObj,
+				}
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			updateCh.In() <- Event{
+				Type: DeleteEvent,
+				Obj:  obj,
+			}
+		},
+	}
+
 	// TODO: add e2e test to verify that changes to one or more configmap trigger an update
 	changeTriggerUpdate := func(name string) bool {
 		return name == configmap || name == tcp || name == udp
@@ -778,6 +815,7 @@ func New(
 		store.informers.IngressClass.AddEventHandler(ingressClassEventHandler)
 	}
 	store.informers.Endpoint.AddEventHandler(epEventHandler)
+	store.informers.EndpointSlice.AddEventHandler(epsEventHandler)
 	store.informers.Secret.AddEventHandler(secrEventHandler)
 	store.informers.ConfigMap.AddEventHandler(cmEventHandler)
 	store.informers.Service.AddEventHandler(serviceHandler)
@@ -1028,6 +1066,11 @@ func (s *k8sStore) GetConfigMap(key string) (*corev1.ConfigMap, error) {
 // GetServiceEndpoints returns the Endpoints of a Service matching key.
 func (s *k8sStore) GetServiceEndpoints(key string) (*corev1.Endpoints, error) {
 	return s.listers.Endpoint.ByKey(key)
+}
+
+// GetServiceEndpointSlices returns the EndpointSlices of a Service matching key.
+func (s *k8sStore) GetServiceEndpointSlices(key string) ([]*discoveryv1.EndpointSlice, error) {
+	return s.listers.EndpointSlice.ByKey(key)
 }
 
 // GetAuthCertificate is used by the auth-tls annotations to get a cert from a secret
