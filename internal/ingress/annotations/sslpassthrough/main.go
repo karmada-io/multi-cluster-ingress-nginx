@@ -17,6 +17,7 @@ limitations under the License.
 package sslpassthrough
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -33,7 +34,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return sslpt{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to indicate if is required to configure
 func (a sslpt) Parse(ing *networking.Ingress) (interface{}, error) {
 	if ing.GetAnnotations() == nil {
@@ -41,4 +42,14 @@ func (a sslpt) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	return parser.GetBoolAnnotation("ssl-passthrough", ing)
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if is required to configure
+func (a sslpt) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	if mci.GetAnnotations() == nil {
+		return false, ing_errors.ErrMissingAnnotations
+	}
+
+	return parser.GetBoolAnnotationFromMCI("ssl-passthrough", mci)
 }

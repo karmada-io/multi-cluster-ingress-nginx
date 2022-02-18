@@ -270,6 +270,10 @@ func (til *testIngressLister) ListIngresses() []*ingress.Ingress {
 	return ingresses
 }
 
+func (til *testIngressLister) ListMultiClusterIngresses() []*ingress.MultiClusterIngress {
+	return nil
+}
+
 func buildIngressLister() ingressLister {
 	return &testIngressLister{}
 }

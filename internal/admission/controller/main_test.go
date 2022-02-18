@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"testing"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	admissionv1 "k8s.io/api/admission/v1"
 	networking "k8s.io/api/networking/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,10 @@ func (ftc failTestChecker) CheckIngress(ing *networking.Ingress) error {
 	return nil
 }
 
+func (ftc failTestChecker) CheckMCI(mci *karmadanetworking.MultiClusterIngress) error {
+	return nil
+}
+
 type testChecker struct {
 	t   *testing.T
 	err error
@@ -48,6 +53,10 @@ func (tc testChecker) CheckIngress(ing *networking.Ingress) error {
 		tc.t.Errorf("CheckIngress should be called with %v ingress, but got %v", testIngressName, ing.ObjectMeta.Name)
 	}
 	return tc.err
+}
+
+func (tc testChecker) CheckMCI(mci *karmadanetworking.MultiClusterIngress) error {
+	return nil
 }
 
 func TestHandleAdmission(t *testing.T) {

@@ -19,6 +19,7 @@ package defaultbackend
 import (
 	"fmt"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -43,6 +44,23 @@ func (db backend) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	name := fmt.Sprintf("%v/%v", ing.Namespace, s)
+	svc, err := db.r.GetService(name)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected error reading service %s: %w", name, err)
+	}
+
+	return svc, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress to use
+// a custom default backend
+func (db backend) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	s, err := parser.GetStringAnnotationFromMCI("default-backend", mci)
+	if err != nil {
+		return nil, err
+	}
+
+	name := fmt.Sprintf("%v/%v", mci.Namespace, s)
 	svc, err := db.r.GetService(name)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected error reading service %s: %w", name, err)

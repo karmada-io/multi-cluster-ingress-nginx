@@ -36,7 +36,7 @@ import (
 )
 
 func TestCreateApiserverClient(t *testing.T) {
-	_, err := createApiserverClient("", "", "")
+	_, _, err := createApiserverClient("", "", "")
 	if err == nil {
 		t.Fatal("Expected an error creating REST client without an API server URL or kubeconfig file.")
 	}

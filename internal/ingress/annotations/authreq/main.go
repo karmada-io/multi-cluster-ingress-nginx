@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	"k8s.io/klog/v2"
 
 	networking "k8s.io/api/networking/v1"
@@ -153,7 +154,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return authReq{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to use an Config URL as source for authentication
 func (a authReq) Parse(ing *networking.Ingress) (interface{}, error) {
 	// Required Parameters
@@ -237,6 +238,106 @@ func (a authReq) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	requestRedirect, _ := parser.GetStringAnnotation("auth-request-redirect", ing)
+
+	return &Config{
+		URL:                    urlString,
+		Host:                   authURL.Hostname(),
+		SigninURL:              signIn,
+		SigninURLRedirectParam: signInRedirectParam,
+		Method:                 authMethod,
+		ResponseHeaders:        responseHeaders,
+		RequestRedirect:        requestRedirect,
+		AuthSnippet:            authSnippet,
+		AuthCacheKey:           authCacheKey,
+		AuthCacheDuration:      authCacheDuration,
+		ProxySetHeaders:        proxySetHeaders,
+	}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to use a Config URL as source for authentication
+func (a authReq) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	// Required Parameters
+	urlString, err := parser.GetStringAnnotationFromMCI("auth-url", mci)
+	if err != nil {
+		return nil, err
+	}
+
+	authURL, err := parser.StringToURL(urlString)
+	if err != nil {
+		return nil, ing_errors.InvalidContent{Name: err.Error()}
+	}
+
+	authMethod, _ := parser.GetStringAnnotationFromMCI("auth-method", mci)
+	if len(authMethod) != 0 && !ValidMethod(authMethod) {
+		return nil, ing_errors.NewLocationDenied("invalid HTTP method")
+	}
+
+	// Optional Parameters
+	signIn, err := parser.GetStringAnnotationFromMCI("auth-signin", mci)
+	if err != nil {
+		klog.V(3).InfoS("auth-signin annotation is undefined and will not be set")
+	}
+
+	signInRedirectParam, err := parser.GetStringAnnotationFromMCI("auth-signin-redirect-param", mci)
+	if err != nil {
+		klog.V(3).Infof("auth-signin-redirect-param annotation is undefined and will not be set")
+	}
+
+	authSnippet, err := parser.GetStringAnnotationFromMCI("auth-snippet", mci)
+	if err != nil {
+		klog.V(3).InfoS("auth-snippet annotation is undefined and will not be set")
+	}
+
+	authCacheKey, err := parser.GetStringAnnotationFromMCI("auth-cache-key", mci)
+	if err != nil {
+		klog.V(3).InfoS("auth-cache-key annotation is undefined and will not be set")
+	}
+
+	durstr, _ := parser.GetStringAnnotationFromMCI("auth-cache-duration", mci)
+	authCacheDuration, err := ParseStringToCacheDurations(durstr)
+	if err != nil {
+		return nil, err
+	}
+
+	responseHeaders := []string{}
+	hstr, _ := parser.GetStringAnnotationFromMCI("auth-response-headers", mci)
+	if len(hstr) != 0 {
+		harr := strings.Split(hstr, ",")
+		for _, header := range harr {
+			header = strings.TrimSpace(header)
+			if len(header) > 0 {
+				if !ValidHeader(header) {
+					return nil, ing_errors.NewLocationDenied("invalid headers list")
+				}
+				responseHeaders = append(responseHeaders, header)
+			}
+		}
+	}
+
+	proxySetHeaderMap, err := parser.GetStringAnnotationFromMCI("auth-proxy-set-headers", mci)
+	if err != nil {
+		klog.V(3).InfoS("auth-set-proxy-headers annotation is undefined and will not be set")
+	}
+
+	var proxySetHeaders map[string]string
+
+	if proxySetHeaderMap != "" {
+		proxySetHeadersMapContents, err := a.r.GetConfigMap(proxySetHeaderMap)
+		if err != nil {
+			return nil, ing_errors.NewLocationDenied(fmt.Sprintf("unable to find configMap %q", proxySetHeaderMap))
+		}
+
+		for header := range proxySetHeadersMapContents.Data {
+			if !ValidHeader(header) {
+				return nil, ing_errors.NewLocationDenied("invalid proxy-set-headers in configmap")
+			}
+		}
+
+		proxySetHeaders = proxySetHeadersMapContents.Data
+	}
+
+	requestRedirect, _ := parser.GetStringAnnotationFromMCI("auth-request-redirect", mci)
 
 	return &Config{
 		URL:                    urlString,

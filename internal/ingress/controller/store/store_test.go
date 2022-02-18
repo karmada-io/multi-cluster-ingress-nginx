@@ -122,6 +122,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -202,6 +203,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -305,6 +307,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -420,6 +423,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			ingressClassconfig)
@@ -549,6 +553,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			ingressClassconfig)
@@ -648,6 +653,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -741,6 +747,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -826,6 +833,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -921,6 +929,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -1044,6 +1053,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -1164,6 +1174,7 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
+			nil,
 			updateCh,
 			false,
 			DefaultClassConfig)

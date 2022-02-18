@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
 	"github.com/mitchellh/hashstructure"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
@@ -59,7 +60,8 @@ type Configuration struct {
 
 	KubeConfigFile string
 
-	Client clientset.Interface
+	Client        clientset.Interface
+	KarmadaClient karmadaclientset.Interface
 
 	ResyncPeriod time.Duration
 
@@ -139,8 +141,10 @@ func (n *NGINXController) syncIngress(interface{}) error {
 		return nil
 	}
 
-	ings := n.store.ListIngresses()
-	hosts, servers, pcfg := n.getConfiguration(ings)
+	//ings := n.store.ListIngresses()
+	//hosts, servers, pcfg := n.getConfiguration(ings)
+	mcis := n.store.ListMultiClusterIngresses()
+	hosts, servers, pcfg := n.getConfigurationFromMCI(mcis)
 
 	n.metricCollector.SetSSLExpireTime(servers)
 
@@ -206,7 +210,8 @@ func (n *NGINXController) syncIngress(interface{}) error {
 		return err
 	}
 
-	ri := getRemovedIngresses(n.runningConfig, pcfg)
+	//ri := getRemovedIngresses(n.runningConfig, pcfg)
+	ri := getRemovedMCIs(n.runningConfig, pcfg)
 	re := getRemovedHosts(n.runningConfig, pcfg)
 	n.metricCollector.RemoveMetrics(ri, re)
 

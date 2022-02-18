@@ -19,6 +19,7 @@ package mirror
 import (
 	"fmt"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -66,7 +67,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return mirror{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the multiclusteringress
 // rule used to configure mirror
 func (a mirror) Parse(ing *networking.Ingress) (interface{}, error) {
 	config := &Config{
@@ -80,6 +81,28 @@ func (a mirror) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.Target, err = parser.GetStringAnnotation("mirror-target", ing)
+	if err != nil {
+		config.Target = ""
+		config.Source = ""
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the ingress
+// rule used to configure mirror
+func (a mirror) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	config := &Config{
+		Source: fmt.Sprintf("/_mirror-%v", mci.UID),
+	}
+
+	var err error
+	config.RequestBody, err = parser.GetStringAnnotationFromMCI("mirror-request-body", mci)
+	if err != nil || config.RequestBody != "off" {
+		config.RequestBody = "on"
+	}
+
+	config.Target, err = parser.GetStringAnnotationFromMCI("mirror-target", mci)
 	if err != nil {
 		config.Target = ""
 		config.Source = ""

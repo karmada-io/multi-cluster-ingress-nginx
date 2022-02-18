@@ -19,14 +19,14 @@ webhooks:
     matchPolicy: Equivalent
     rules:
       - apiGroups:
-          - networking.k8s.io
+          - networking.karmada.io
         apiVersions:
-          - v1
+          - v1alpha1
         operations:
           - CREATE
           - UPDATE
         resources:
-          - ingresses
+          - multiclusteringresses
     failurePolicy: {{ .Values.controller.admissionWebhooks.failurePolicy | default "Fail" }}
     sideEffects: None
     admissionReviewVersions:
@@ -35,7 +35,7 @@ webhooks:
       service:
         namespace: {{ .Release.Namespace | quote }}
         name: {{ include "ingress-nginx.controller.fullname" . }}-admission
-        path: /networking/v1/ingresses
+        path: /networking/v1alpha1/multiclusteringresses
     {{- if .Values.controller.admissionWebhooks.timeoutSeconds }}
     timeoutSeconds: {{ .Values.controller.admissionWebhooks.timeoutSeconds }}
     {{- end }}

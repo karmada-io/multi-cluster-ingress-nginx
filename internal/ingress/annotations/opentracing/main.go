@@ -17,6 +17,7 @@ limitations under the License.
 package opentracing
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -68,6 +69,20 @@ func (s opentracing) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	trustSpan, err := parser.GetBoolAnnotation("opentracing-trust-incoming-span", ing)
+	if err != nil {
+		return &Config{Set: true, Enabled: enabled}, nil
+	}
+
+	return &Config{Set: true, Enabled: enabled, TrustSet: true, TrustEnabled: trustSpan}, nil
+}
+
+func (s opentracing) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	enabled, err := parser.GetBoolAnnotationFromMCI("enable-opentracing", mci)
+	if err != nil {
+		return &Config{}, nil
+	}
+
+	trustSpan, err := parser.GetBoolAnnotationFromMCI("opentracing-trust-incoming-span", mci)
 	if err != nil {
 		return &Config{Set: true, Enabled: enabled}, nil
 	}

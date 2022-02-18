@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/ingress-nginx/internal/net"
 
@@ -56,7 +57,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return ipwhitelist{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to limit access to certain client addresses or networks.
 // Multiple ranges can specified using commas as separator
 // e.g. `18.0.0.0/8,56.0.0.0/8`
@@ -65,6 +66,41 @@ func (a ipwhitelist) Parse(ing *networking.Ingress) (interface{}, error) {
 	sort.Strings(defBackend.WhitelistSourceRange)
 
 	val, err := parser.GetStringAnnotation("whitelist-source-range", ing)
+	// A missing annotation is not a problem, just use the default
+	if err == ing_errors.ErrMissingAnnotations {
+		return &SourceRange{CIDR: defBackend.WhitelistSourceRange}, nil
+	}
+
+	values := strings.Split(val, ",")
+	ipnets, ips, err := net.ParseIPNets(values...)
+	if err != nil && len(ips) == 0 {
+		return &SourceRange{CIDR: defBackend.WhitelistSourceRange}, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("the annotation does not contain a valid IP address or network: %w", err),
+		}
+	}
+
+	cidrs := []string{}
+	for k := range ipnets {
+		cidrs = append(cidrs, k)
+	}
+	for k := range ips {
+		cidrs = append(cidrs, k)
+	}
+
+	sort.Strings(cidrs)
+
+	return &SourceRange{cidrs}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to limit access to certain client addresses or networks.
+// Multiple ranges can specified using commas as separator
+// e.g. `18.0.0.0/8,56.0.0.0/8`
+func (a ipwhitelist) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	defBackend := a.r.GetDefaultBackend()
+	sort.Strings(defBackend.WhitelistSourceRange)
+
+	val, err := parser.GetStringAnnotationFromMCI("whitelist-source-range", mci)
 	// A missing annotation is not a problem, just use the default
 	if err == ing_errors.ErrMissingAnnotations {
 		return &SourceRange{CIDR: defBackend.WhitelistSourceRange}, nil

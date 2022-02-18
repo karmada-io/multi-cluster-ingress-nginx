@@ -19,6 +19,7 @@ package rewrite
 import (
 	"net/url"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/klog/v2"
 
@@ -79,7 +80,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return rewrite{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to rewrite the defined paths
 func (a rewrite) Parse(ing *networking.Ingress) (interface{}, error) {
 	var err error
@@ -103,6 +104,54 @@ func (a rewrite) Parse(ing *networking.Ingress) (interface{}, error) {
 	config.UseRegex, _ = parser.GetBoolAnnotation("use-regex", ing)
 
 	config.AppRoot, err = parser.GetStringAnnotation("app-root", ing)
+	if err != nil {
+		if !errors.IsMissingAnnotations(err) && !errors.IsInvalidContent(err) {
+			klog.Warningf("Annotation app-root contains an invalid value: %v", err)
+		}
+
+		return config, nil
+	}
+
+	u, err := url.ParseRequestURI(config.AppRoot)
+	if err != nil {
+		klog.Warningf("Annotation app-root contains an invalid value: %v", err)
+		config.AppRoot = ""
+		return config, nil
+	}
+
+	if u.IsAbs() {
+		klog.Warningf("Annotation app-root only allows absolute paths (%v)", config.AppRoot)
+		config.AppRoot = ""
+		return config, nil
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to rewrite the defined paths
+func (a rewrite) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	config.Target, _ = parser.GetStringAnnotationFromMCI("rewrite-target", mci)
+	config.SSLRedirect, err = parser.GetBoolAnnotationFromMCI("ssl-redirect", mci)
+	if err != nil {
+		config.SSLRedirect = a.r.GetDefaultBackend().SSLRedirect
+	}
+	config.PreserveTrailingSlash, err = parser.GetBoolAnnotationFromMCI("preserve-trailing-slash", mci)
+	if err != nil {
+		config.PreserveTrailingSlash = a.r.GetDefaultBackend().PreserveTrailingSlash
+	}
+
+	config.ForceSSLRedirect, err = parser.GetBoolAnnotationFromMCI("force-ssl-redirect", mci)
+	if err != nil {
+		config.ForceSSLRedirect = a.r.GetDefaultBackend().ForceSSLRedirect
+	}
+
+	config.UseRegex, _ = parser.GetBoolAnnotationFromMCI("use-regex", mci)
+
+	config.AppRoot, err = parser.GetStringAnnotationFromMCI("app-root", mci)
 	if err != nil {
 		if !errors.IsMissingAnnotations(err) && !errors.IsInvalidContent(err) {
 			klog.Warningf("Annotation app-root contains an invalid value: %v", err)

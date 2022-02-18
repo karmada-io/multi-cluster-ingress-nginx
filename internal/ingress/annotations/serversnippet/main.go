@@ -17,6 +17,7 @@ limitations under the License.
 package serversnippet
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -38,3 +39,11 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 func (a serverSnippet) Parse(ing *networking.Ingress) (interface{}, error) {
 	return parser.GetStringAnnotation("server-snippet", ing)
 }
+
+// ParseByMCI parses the annotations contained in the multiclusteringress rule
+// used to indicate if the location/s contains a fragment of
+// configuration to be included inside the paths of the rules
+func (a serverSnippet) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	return parser.GetStringAnnotationFromMCI("server-snippet", mci)
+}
+

@@ -17,6 +17,7 @@ limitations under the License.
 package portinredirect
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -36,6 +37,17 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // rule used to indicate if the redirects must
 func (a portInRedirect) Parse(ing *networking.Ingress) (interface{}, error) {
 	up, err := parser.GetBoolAnnotation("use-port-in-redirects", ing)
+	if err != nil {
+		return a.r.GetDefaultBackend().UsePortInRedirects, nil
+	}
+
+	return up, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the redirects must
+func (a portInRedirect) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	up, err := parser.GetBoolAnnotationFromMCI("use-port-in-redirects", mci)
 	if err != nil {
 		return a.r.GetDefaultBackend().UsePortInRedirects, nil
 	}

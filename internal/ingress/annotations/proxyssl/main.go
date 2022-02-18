@@ -22,7 +22,9 @@ import (
 	"sort"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
+
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	ing_errors "k8s.io/ingress-nginx/internal/ingress/errors"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
@@ -165,6 +167,64 @@ func (p proxySSL) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.ProxySSLServerName, err = parser.GetStringAnnotation("proxy-ssl-server-name", ing)
+	if err != nil || !proxySSLOnOffRegex.MatchString(config.ProxySSLServerName) {
+		config.ProxySSLServerName = defaultProxySSLServerName
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to use a Certificate as authentication method
+func (p proxySSL) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	proxysslsecret, err := parser.GetStringAnnotationFromMCI("proxy-ssl-secret", mci)
+	if err != nil {
+		return &Config{}, err
+	}
+
+	_, _, err = k8s.ParseNameNS(proxysslsecret)
+	if err != nil {
+		return &Config{}, ing_errors.NewLocationDenied(err.Error())
+	}
+
+	proxyCert, err := p.r.GetAuthCertificate(proxysslsecret)
+	if err != nil {
+		e := fmt.Errorf("error obtaining certificate: %w", err)
+		return &Config{}, ing_errors.LocationDenied{Reason: e}
+	}
+	config.AuthSSLCert = *proxyCert
+
+	config.Ciphers, err = parser.GetStringAnnotationFromMCI("proxy-ssl-ciphers", mci)
+	if err != nil {
+		config.Ciphers = defaultProxySSLCiphers
+	}
+
+	config.Protocols, err = parser.GetStringAnnotationFromMCI("proxy-ssl-protocols", mci)
+	if err != nil {
+		config.Protocols = defaultProxySSLProtocols
+	} else {
+		config.Protocols = sortProtocols(config.Protocols)
+	}
+
+	config.ProxySSLName, err = parser.GetStringAnnotationFromMCI("proxy-ssl-name", mci)
+	if err != nil {
+		config.ProxySSLName = ""
+	}
+
+	config.Verify, err = parser.GetStringAnnotationFromMCI("proxy-ssl-verify", mci)
+	if err != nil || !proxySSLOnOffRegex.MatchString(config.Verify) {
+		config.Verify = defaultProxySSLVerify
+	}
+
+	config.VerifyDepth, err = parser.GetIntAnnotationFromMCI("proxy-ssl-verify-depth", mci)
+	if err != nil || config.VerifyDepth == 0 {
+		config.VerifyDepth = defaultProxySSLVerifyDepth
+	}
+
+	config.ProxySSLServerName, err = parser.GetStringAnnotationFromMCI("proxy-ssl-server-name", mci)
 	if err != nil || !proxySSLOnOffRegex.MatchString(config.ProxySSLServerName) {
 		config.ProxySSLServerName = defaultProxySSLServerName
 	}

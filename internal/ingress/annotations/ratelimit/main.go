@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -140,7 +141,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return ratelimit{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to rewrite the defined paths
 func (a ratelimit) Parse(ing *networking.Ingress) (interface{}, error) {
 	defBackend := a.r.GetDefaultBackend()
@@ -179,6 +180,73 @@ func (a ratelimit) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	zoneName := fmt.Sprintf("%v_%v_%v", ing.GetNamespace(), ing.GetName(), ing.UID)
+
+	return &Config{
+		Connections: Zone{
+			Name:       fmt.Sprintf("%v_conn", zoneName),
+			Limit:      conn,
+			Burst:      conn * burstMultiplier,
+			SharedSize: defSharedSize,
+		},
+		RPS: Zone{
+			Name:       fmt.Sprintf("%v_rps", zoneName),
+			Limit:      rps,
+			Burst:      rps * burstMultiplier,
+			SharedSize: defSharedSize,
+		},
+		RPM: Zone{
+			Name:       fmt.Sprintf("%v_rpm", zoneName),
+			Limit:      rpm,
+			Burst:      rpm * burstMultiplier,
+			SharedSize: defSharedSize,
+		},
+		LimitRate:      lr,
+		LimitRateAfter: lra,
+		Name:           zoneName,
+		ID:             encode(zoneName),
+		Whitelist:      cidrs,
+	}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to rewrite the defined paths
+func (a ratelimit) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	defBackend := a.r.GetDefaultBackend()
+	lr, err := parser.GetIntAnnotationFromMCI("limit-rate", mci)
+	if err != nil {
+		lr = defBackend.LimitRate
+	}
+	lra, err := parser.GetIntAnnotationFromMCI("limit-rate-after", mci)
+	if err != nil {
+		lra = defBackend.LimitRateAfter
+	}
+
+	rpm, _ := parser.GetIntAnnotationFromMCI("limit-rpm", mci)
+	rps, _ := parser.GetIntAnnotationFromMCI("limit-rps", mci)
+	conn, _ := parser.GetIntAnnotationFromMCI("limit-connections", mci)
+	burstMultiplier, err := parser.GetIntAnnotationFromMCI("limit-burst-multiplier", mci)
+	if err != nil {
+		burstMultiplier = defBurst
+	}
+
+	val, _ := parser.GetStringAnnotationFromMCI("limit-whitelist", mci)
+
+	cidrs, err := net.ParseCIDRs(val)
+	if err != nil {
+		return nil, err
+	}
+
+	if rpm == 0 && rps == 0 && conn == 0 {
+		return &Config{
+			Connections:    Zone{},
+			RPS:            Zone{},
+			RPM:            Zone{},
+			LimitRate:      lr,
+			LimitRateAfter: lra,
+		}, nil
+	}
+
+	zoneName := fmt.Sprintf("%v_%v_%v", mci.GetNamespace(), mci.GetName(), mci.UID)
 
 	return &Config{
 		Connections: Zone{

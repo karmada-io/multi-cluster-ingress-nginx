@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	admissionv1 "k8s.io/api/admission/v1"
 	networking "k8s.io/api/networking/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -33,6 +34,7 @@ import (
 // contains invalid instructions
 type Checker interface {
 	CheckIngress(ing *networking.Ingress) error
+	CheckMCI(mci *karmadanetworking.MultiClusterIngress) error
 }
 
 // IngressAdmission implements the AdmissionController interface
@@ -42,10 +44,16 @@ type IngressAdmission struct {
 }
 
 var (
-	ingressResource = metav1.GroupVersionKind{
-		Group:   networking.GroupName,
-		Version: "v1",
-		Kind:    "Ingress",
+	//ingressResource = metav1.GroupVersionKind{
+	//	Group:   networking.GroupName,
+	//	Version: "v1",
+	//	Kind:    "Ingress",
+	//}
+
+	mciResource = metav1.GroupVersionKind{
+		Group:   karmadanetworking.GroupName,
+		Version: "v1alpha1",
+		Kind:    "MultiClusterIngress",
 	}
 )
 
@@ -59,23 +67,24 @@ func (ia *IngressAdmission) HandleAdmission(obj runtime.Object) (runtime.Object,
 		return nil, fmt.Errorf("request is not of type AdmissionReview v1 or v1beta1")
 	}
 
-	if !apiequality.Semantic.DeepEqual(review.Request.Kind, ingressResource) {
-		return nil, fmt.Errorf("rejecting admission review because the request does not contain an Ingress resource but %s with name %s in namespace %s",
+	if !apiequality.Semantic.DeepEqual(review.Request.Kind, mciResource) {
+		return nil, fmt.Errorf("rejecting admission review because the request does not contain a MultiClusterIngress resource but %s with name %s in namespace %s",
 			review.Request.Kind.String(), review.Request.Name, review.Request.Namespace)
 	}
 
 	status := &admissionv1.AdmissionResponse{}
 	status.UID = review.Request.UID
 
-	ingress := networking.Ingress{}
+	//ingress := networking.Ingress{}
+	mci := karmadanetworking.MultiClusterIngress{}
 
 	codec := json.NewSerializerWithOptions(json.DefaultMetaFactory, scheme, scheme, json.SerializerOptions{
 		Pretty: true,
 	})
 	codec.Decode(review.Request.Object.Raw, nil, nil)
-	_, _, err := codec.Decode(review.Request.Object.Raw, nil, &ingress)
+	_, _, err := codec.Decode(review.Request.Object.Raw, nil, &mci)
 	if err != nil {
-		klog.ErrorS(err, "failed to decode ingress")
+		klog.ErrorS(err, "failed to decode multiclusteringress")
 		status.Allowed = false
 		status.Result = &metav1.Status{
 			Status: metav1.StatusFailure, Code: http.StatusBadRequest, Reason: metav1.StatusReasonBadRequest,
@@ -86,8 +95,8 @@ func (ia *IngressAdmission) HandleAdmission(obj runtime.Object) (runtime.Object,
 		return review, nil
 	}
 
-	if err := ia.Checker.CheckIngress(&ingress); err != nil {
-		klog.ErrorS(err, "invalid ingress configuration", "ingress", fmt.Sprintf("%v/%v", review.Request.Namespace, review.Request.Name))
+	if err := ia.Checker.CheckMCI(&mci); err != nil {
+		klog.ErrorS(err, "invalid multiclusteringress configuration", "multiclusteringress", fmt.Sprintf("%v/%v", review.Request.Namespace, review.Request.Name))
 		status.Allowed = false
 		status.Result = &metav1.Status{
 			Status: metav1.StatusFailure, Code: http.StatusBadRequest, Reason: metav1.StatusReasonBadRequest,
@@ -98,7 +107,7 @@ func (ia *IngressAdmission) HandleAdmission(obj runtime.Object) (runtime.Object,
 		return review, nil
 	}
 
-	klog.InfoS("successfully validated configuration, accepting", "ingress", fmt.Sprintf("%v/%v", review.Request.Namespace, review.Request.Name))
+	klog.InfoS("successfully validated configuration, accepting", "multiclusteringress", fmt.Sprintf("%v/%v", review.Request.Namespace, review.Request.Name))
 	status.Allowed = true
 	review.Response = status
 

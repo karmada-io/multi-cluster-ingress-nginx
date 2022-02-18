@@ -17,6 +17,7 @@ limitations under the License.
 package clientbodybuffersize
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -36,4 +37,10 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // used to add an client-body-buffer-size to the provided locations
 func (cbbs clientBodyBufferSize) Parse(ing *networking.Ingress) (interface{}, error) {
 	return parser.GetStringAnnotation("client-body-buffer-size", ing)
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress rule
+// used to add an client-body-buffer-size to the provided locations
+func (cbbs clientBodyBufferSize) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	return parser.GetStringAnnotationFromMCI("client-body-buffer-size", mci)
 }

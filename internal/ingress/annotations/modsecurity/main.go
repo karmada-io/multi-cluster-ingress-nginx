@@ -17,7 +17,9 @@ limitations under the License.
 package modsecurity
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
+
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
 )
@@ -91,6 +93,37 @@ func (a modSecurity) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.Snippet, err = parser.GetStringAnnotation("modsecurity-snippet", ing)
+	if err != nil {
+		config.Snippet = ""
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to enable ModSecurity in a particular location
+func (a modSecurity) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	config.EnableSet = true
+	config.Enable, err = parser.GetBoolAnnotationFromMCI("enable-modsecurity", mci)
+	if err != nil {
+		config.Enable = false
+		config.EnableSet = false
+	}
+
+	config.OWASPRules, err = parser.GetBoolAnnotationFromMCI("enable-owasp-core-rules", mci)
+	if err != nil {
+		config.OWASPRules = false
+	}
+
+	config.TransactionID, err = parser.GetStringAnnotationFromMCI("modsecurity-transaction-id", mci)
+	if err != nil {
+		config.TransactionID = ""
+	}
+
+	config.Snippet, err = parser.GetStringAnnotationFromMCI("modsecurity-snippet", mci)
 	if err != nil {
 		config.Snippet = ""
 	}

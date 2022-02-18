@@ -17,6 +17,7 @@ limitations under the License.
 package connection
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -42,6 +43,21 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // rule used to indicate if the connection header should be overridden.
 func (a connection) Parse(ing *networking.Ingress) (interface{}, error) {
 	cp, err := parser.GetStringAnnotation("connection-proxy-header", ing)
+	if err != nil {
+		return &Config{
+			Enabled: false,
+		}, err
+	}
+	return &Config{
+		Enabled: true,
+		Header:  cp,
+	}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the connection header should be overridden.
+func (a connection) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	cp, err := parser.GetStringAnnotationFromMCI("connection-proxy-header", mci)
 	if err != nil {
 		return &Config{
 			Enabled: false,

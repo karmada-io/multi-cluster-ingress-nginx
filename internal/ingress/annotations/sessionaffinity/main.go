@@ -19,6 +19,7 @@ package sessionaffinity
 import (
 	"regexp"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/klog/v2"
 
@@ -150,6 +151,59 @@ func (a affinity) cookieAffinityParse(ing *networking.Ingress) *Cookie {
 	return cookie
 }
 
+// cookieAffinityParseByMCI gets the annotation values related to Cookie Affinity
+// It also sets default values when no value or incorrect value is found
+func (a affinity) cookieAffinityParseByMCI(mci *karmadanetworking.MultiClusterIngress) *Cookie {
+	var err error
+
+	cookie := &Cookie{}
+
+	cookie.Name, err = parser.GetStringAnnotationFromMCI(annotationAffinityCookieName, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieName, "default", defaultAffinityCookieName)
+		cookie.Name = defaultAffinityCookieName
+	}
+
+	cookie.Expires, err = parser.GetStringAnnotationFromMCI(annotationAffinityCookieExpires, mci)
+	if err != nil || !affinityCookieExpiresRegex.MatchString(cookie.Expires) {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieExpires)
+		cookie.Expires = ""
+	}
+
+	cookie.MaxAge, err = parser.GetStringAnnotationFromMCI(annotationAffinityCookieMaxAge, mci)
+	if err != nil || !affinityCookieExpiresRegex.MatchString(cookie.MaxAge) {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieMaxAge)
+		cookie.MaxAge = ""
+	}
+
+	cookie.Path, err = parser.GetStringAnnotationFromMCI(annotationAffinityCookiePath, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookiePath)
+	}
+
+	cookie.SameSite, err = parser.GetStringAnnotationFromMCI(annotationAffinityCookieSameSite, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieSameSite)
+	}
+
+	cookie.Secure, err = parser.GetBoolAnnotationFromMCI(annotationAffinityCookieSecure, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieSecure)
+	}
+
+	cookie.ConditionalSameSiteNone, err = parser.GetBoolAnnotationFromMCI(annotationAffinityCookieConditionalSameSiteNone, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieConditionalSameSiteNone)
+	}
+
+	cookie.ChangeOnFailure, err = parser.GetBoolAnnotationFromMCI(annotationAffinityCookieChangeOnFailure, mci)
+	if err != nil {
+		klog.V(3).InfoS("Invalid or no annotation value found. Ignoring", "ingress", klog.KObj(mci), "annotation", annotationAffinityCookieChangeOnFailure)
+	}
+
+	return cookie
+}
+
 // NewParser creates a new Affinity annotation parser
 func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return affinity{r}
@@ -159,7 +213,7 @@ type affinity struct {
 	r resolver.Resolver
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to configure the affinity directives
 func (a affinity) Parse(ing *networking.Ingress) (interface{}, error) {
 	cookie := &Cookie{}
@@ -185,6 +239,43 @@ func (a affinity) Parse(ing *networking.Ingress) (interface{}, error) {
 		cookie = a.cookieAffinityParse(ing)
 	default:
 		klog.V(3).InfoS("No default affinity found", "ingress", ing.Name)
+
+	}
+
+	return &Config{
+		Type:           at,
+		Mode:           am,
+		CanaryBehavior: cb,
+		Cookie:         *cookie,
+	}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to configure the affinity directives
+func (a affinity) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	cookie := &Cookie{}
+	// Check the type of affinity that will be used
+	at, err := parser.GetStringAnnotationFromMCI(annotationAffinityType, mci)
+	if err != nil {
+		at = ""
+	}
+
+	// Check the affinity mode that will be used
+	am, err := parser.GetStringAnnotationFromMCI(annotationAffinityMode, mci)
+	if err != nil {
+		am = ""
+	}
+
+	cb, err := parser.GetStringAnnotationFromMCI(annotationAffinityCanaryBehavior, mci)
+	if err != nil {
+		cb = ""
+	}
+
+	switch at {
+	case "cookie":
+		cookie = a.cookieAffinityParseByMCI(mci)
+	default:
+		klog.V(3).InfoS("No default affinity found", "multiclusteringress", mci.Name)
 
 	}
 

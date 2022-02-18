@@ -17,6 +17,7 @@ limitations under the License.
 package influxdb
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -69,6 +70,41 @@ func (c influxdb) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.InfluxDBServerName, err = parser.GetStringAnnotation("influxdb-server-name", ing)
+	if err != nil {
+		config.InfluxDBServerName = "nginx-ingress"
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations to look for InfluxDB configurations
+func (c influxdb) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	config.InfluxDBEnabled, err = parser.GetBoolAnnotationFromMCI("enable-influxdb", mci)
+	if err != nil {
+		config.InfluxDBEnabled = false
+	}
+
+	config.InfluxDBMeasurement, err = parser.GetStringAnnotationFromMCI("influxdb-measurement", mci)
+	if err != nil {
+		config.InfluxDBMeasurement = "default"
+	}
+
+	config.InfluxDBPort, err = parser.GetStringAnnotationFromMCI("influxdb-port", mci)
+	if err != nil {
+		// This is not the default 8086 port but the port usually used to expose
+		// influxdb in UDP, the module uses UDP to talk to influx via the line protocol.
+		config.InfluxDBPort = "8089"
+	}
+
+	config.InfluxDBHost, err = parser.GetStringAnnotationFromMCI("influxdb-host", mci)
+	if err != nil {
+		config.InfluxDBHost = "127.0.0.1"
+	}
+
+	config.InfluxDBServerName, err = parser.GetStringAnnotationFromMCI("influxdb-server-name", mci)
 	if err != nil {
 		config.InfluxDBServerName = "nginx-ingress"
 	}

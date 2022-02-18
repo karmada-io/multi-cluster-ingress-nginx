@@ -17,6 +17,7 @@ limitations under the License.
 package upstreamhashby
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -44,6 +45,19 @@ func (a upstreamhashby) Parse(ing *networking.Ingress) (interface{}, error) {
 	upstreamHashBy, _ := parser.GetStringAnnotation("upstream-hash-by", ing)
 	upstreamHashBySubset, _ := parser.GetBoolAnnotation("upstream-hash-by-subset", ing)
 	upstreamHashbySubsetSize, _ := parser.GetIntAnnotation("upstream-hash-by-subset-size", ing)
+
+	if upstreamHashbySubsetSize == 0 {
+		upstreamHashbySubsetSize = 3
+	}
+
+	return &Config{upstreamHashBy, upstreamHashBySubset, upstreamHashbySubsetSize}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress rule
+func (a upstreamhashby) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	upstreamHashBy, _ := parser.GetStringAnnotationFromMCI("upstream-hash-by", mci)
+	upstreamHashBySubset, _ := parser.GetBoolAnnotationFromMCI("upstream-hash-by-subset", mci)
+	upstreamHashbySubsetSize, _ := parser.GetIntAnnotationFromMCI("upstream-hash-by-subset-size", mci)
 
 	if upstreamHashbySubsetSize == 0 {
 		upstreamHashbySubsetSize = 3

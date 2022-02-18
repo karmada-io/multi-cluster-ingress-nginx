@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/klog/v2"
 
@@ -43,7 +44,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return backendProtocol{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to indicate the backend protocol.
 func (a backendProtocol) Parse(ing *networking.Ingress) (interface{}, error) {
 	if ing.GetAnnotations() == nil {
@@ -51,6 +52,27 @@ func (a backendProtocol) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	proto, err := parser.GetStringAnnotation("backend-protocol", ing)
+	if err != nil {
+		return HTTP, nil
+	}
+
+	proto = strings.TrimSpace(strings.ToUpper(proto))
+	if !validProtocols.MatchString(proto) {
+		klog.Warningf("Protocol %v is not a valid value for the backend-protocol annotation. Using HTTP as protocol", proto)
+		return HTTP, nil
+	}
+
+	return proto, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate the backend protocol.
+func (a backendProtocol) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	if mci.GetAnnotations() == nil {
+		return HTTP, nil
+	}
+
+	proto, err := parser.GetStringAnnotationFromMCI("backend-protocol", mci)
 	if err != nil {
 		return HTTP, nil
 	}

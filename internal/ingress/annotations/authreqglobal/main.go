@@ -17,6 +17,7 @@ limitations under the License.
 package authreqglobal
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -32,11 +33,23 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return authReqGlobal{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to enable or disable global external authentication
 func (a authReqGlobal) Parse(ing *networking.Ingress) (interface{}, error) {
 
 	enableGlobalAuth, err := parser.GetBoolAnnotation("enable-global-auth", ing)
+	if err != nil {
+		enableGlobalAuth = true
+	}
+
+	return enableGlobalAuth, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to enable or disable global external authentication
+func (a authReqGlobal) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+
+	enableGlobalAuth, err := parser.GetBoolAnnotationFromMCI("enable-global-auth", mci)
 	if err != nil {
 		enableGlobalAuth = true
 	}
