@@ -31,7 +31,7 @@ import (
 	karmadanetwork "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
 	karmadainformers "github.com/karmada-io/karmada/pkg/generated/informers/externalversions"
-        "github.com/karmada-io/karmada/pkg/util/gclient"
+	"github.com/karmada-io/karmada/pkg/util/gclient"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -273,6 +273,7 @@ func New(
 	configmap, tcp, udp, defaultSSLCertificate string,
 	resyncPeriod time.Duration,
 	client clientset.Interface,
+	karmadaKubeClient clientset.Interface,
 	karmadaClient karmadaclientset.Interface,
 	updateCh *channels.RingChannel,
 	disableCatchAll bool,
@@ -338,6 +339,10 @@ func New(
 		informers.WithNamespace(namespace),
 	)
 
+	kubeInfFactory := informers.NewSharedInformerFactoryWithOptions(karmadaKubeClient, resyncPeriod,
+		informers.WithNamespace(namespace),
+	)
+
 	karmadaInfFactory := karmadainformers.NewSharedInformerFactoryWithOptions(karmadaClient, resyncPeriod,
 		karmadainformers.WithNamespace(namespace),
 	)
@@ -349,12 +354,12 @@ func New(
 	)
 
 	// create informers factory for secrets
-	infFactorySecrets := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
+	infFactorySecrets := informers.NewSharedInformerFactoryWithOptions(karmadaKubeClient, resyncPeriod,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(secretsTweakListOptionsFunc),
 	)
 
-	store.informers.Ingress = infFactory.Networking().V1().Ingresses().Informer()
+	store.informers.Ingress = kubeInfFactory.Networking().V1().Ingresses().Informer()
 	store.listers.Ingress.Store = store.informers.Ingress.GetStore()
 
 	store.informers.MultiClusterIngress = karmadaInfFactory.Networking().V1alpha1().MultiClusterIngresses().Informer()
@@ -365,10 +370,10 @@ func New(
 		store.listers.IngressClass.Store = cache.NewStore(cache.MetaNamespaceKeyFunc)
 	}
 
-	store.informers.Endpoint = infFactory.Core().V1().Endpoints().Informer()
+	store.informers.Endpoint = kubeInfFactory.Core().V1().Endpoints().Informer()
 	store.listers.Endpoint.Store = store.informers.Endpoint.GetStore()
 
-	store.informers.EndpointSlice = infFactory.Discovery().V1().EndpointSlices().Informer()
+	store.informers.EndpointSlice = kubeInfFactory.Discovery().V1().EndpointSlices().Informer()
 	store.listers.EndpointSlice.Store = store.informers.EndpointSlice.GetStore()
 
 	store.informers.Secret = infFactorySecrets.Core().V1().Secrets().Informer()
@@ -377,13 +382,13 @@ func New(
 	store.informers.ConfigMap = infFactoryConfigmaps.Core().V1().ConfigMaps().Informer()
 	store.listers.ConfigMap.Store = store.informers.ConfigMap.GetStore()
 
-	store.informers.Service = infFactory.Core().V1().Services().Informer()
+	store.informers.Service = kubeInfFactory.Core().V1().Services().Informer()
 	store.listers.Service.Store = store.informers.Service.GetStore()
 
 	// avoid caching namespaces at cluster scope when watching single namespace
 	if namespaceSelector != nil && !namespaceSelector.Empty() {
 		// cache informers factory for namespaces
-		infFactoryNamespaces := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
+		infFactoryNamespaces := informers.NewSharedInformerFactoryWithOptions(karmadaKubeClient, resyncPeriod,
 			informers.WithTweakListOptions(labelsTweakListOptionsFunc),
 		)
 
