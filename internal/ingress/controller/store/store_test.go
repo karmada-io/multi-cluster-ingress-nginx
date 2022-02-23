@@ -21,12 +21,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/eapache/channels"
+	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
+	"github.com/karmada-io/karmada/pkg/util/gclient"
 	v1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -84,7 +87,11 @@ func TestStore(t *testing.T) {
 
 	pathPrefix = networking.PathTypePrefix
 
-	te := &envtest.Environment{}
+	te := &envtest.Environment{Scheme: gclient.NewSchema()}
+	te.CRDInstallOptions = envtest.CRDInstallOptions{
+		Paths: []string{filepath.Join(".", "testdata", "crds", "networking_karmada_io_multiclusteringresses.yaml")},
+	}
+
 	cfg, err := te.Start()
 	if err != nil {
 		t.Fatalf("error: %v", err)
@@ -95,6 +102,16 @@ func TestStore(t *testing.T) {
 	defer te.Stop()
 
 	clientSet, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+
+	karmadaClient, err := karmadaclientset.NewForConfig(cfg)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -122,8 +139,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -204,8 +221,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -309,8 +326,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -426,8 +443,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			ingressClassconfig)
@@ -557,8 +574,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			ingressClassconfig)
@@ -658,8 +675,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -753,8 +770,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -840,8 +857,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -937,8 +954,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -1062,8 +1079,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
@@ -1184,8 +1201,8 @@ func TestStore(t *testing.T) {
 			"",
 			10*time.Minute,
 			clientSet,
-			nil,
-			nil,
+			kubeClient,
+			karmadaClient,
 			updateCh,
 			false,
 			DefaultClassConfig)
