@@ -224,14 +224,14 @@ jobs:
           echo "loading docker images..."
           pigz -dc docker.tar.gz | docker load
 
-      - name: Run e2e tests
+      - name: Run dev env
         env:
           KIND_CLUSTER_NAME: kind
           SKIP_CLUSTER_CREATION: true
           SKIP_IMAGE_CREATION: true
         run: |
           kind get kubeconfig > $HOME/.kube/kind-config-kind
-          make kind-e2e-test
+          make dev-env
 
   test-image-build:
     runs-on: ubuntu-latest
