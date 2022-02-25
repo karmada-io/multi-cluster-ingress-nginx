@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -60,7 +61,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return fastcgi{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to indicate the fastcgiConfig.
 func (a fastcgi) Parse(ing *networking.Ingress) (interface{}, error) {
 
@@ -90,6 +91,51 @@ func (a fastcgi) Parse(ing *networking.Ingress) (interface{}, error) {
 
 	if cmns == "" {
 		cmns = ing.Namespace
+	}
+
+	cm = fmt.Sprintf("%v/%v", cmns, cmn)
+	cmap, err := a.r.GetConfigMap(cm)
+	if err != nil {
+		return fcgiConfig, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("unexpected error reading configmap %s: %w", cm, err),
+		}
+	}
+
+	fcgiConfig.Params = cmap.Data
+
+	return fcgiConfig, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate the fastcgiConfig.
+func (a fastcgi) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+
+	fcgiConfig := Config{}
+
+	if mci.GetAnnotations() == nil {
+		return fcgiConfig, nil
+	}
+
+	index, err := parser.GetStringAnnotationFromMCI("fastcgi-index", mci)
+	if err != nil {
+		index = ""
+	}
+	fcgiConfig.Index = index
+
+	cm, err := parser.GetStringAnnotationFromMCI("fastcgi-params-configmap", mci)
+	if err != nil {
+		return fcgiConfig, nil
+	}
+
+	cmns, cmn, err := cache.SplitMetaNamespaceKey(cm)
+	if err != nil {
+		return fcgiConfig, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("error reading configmap name from annotation: %w", err),
+		}
+	}
+
+	if cmns == "" {
+		cmns = mci.Namespace
 	}
 
 	cm = fmt.Sprintf("%v/%v", cmns, cmn)

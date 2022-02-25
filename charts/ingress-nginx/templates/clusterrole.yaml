@@ -69,6 +69,14 @@ rules:
       - list
       - watch
   - apiGroups:
+      - networking.karmada.io
+    resources:
+      - multiclusteringresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
       - ""
     resources:
       - events
@@ -79,6 +87,12 @@ rules:
       - networking.k8s.io
     resources:
       - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - networking.karmada.io
+    resources:
+      - multiclusteringresses/status
     verbs:
       - update
   - apiGroups:

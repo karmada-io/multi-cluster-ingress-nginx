@@ -17,6 +17,7 @@ limitations under the License.
 package proxy
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -117,7 +118,7 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 	return proxy{r}
 }
 
-// ParseAnnotations parses the annotations contained in the ingress
+// Parse parses the annotations contained in the ingress
 // rule used to configure upstream check parameters
 func (a proxy) Parse(ing *networking.Ingress) (interface{}, error) {
 	defBackend := a.r.GetDefaultBackend()
@@ -206,6 +207,102 @@ func (a proxy) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.ProxyMaxTempFileSize, err = parser.GetStringAnnotation("proxy-max-temp-file-size", ing)
+	if err != nil {
+		config.ProxyMaxTempFileSize = defBackend.ProxyMaxTempFileSize
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to configure upstream check parameters
+func (a proxy) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	defBackend := a.r.GetDefaultBackend()
+	config := &Config{}
+
+	var err error
+
+	config.ConnectTimeout, err = parser.GetIntAnnotationFromMCI("proxy-connect-timeout", mci)
+	if err != nil {
+		config.ConnectTimeout = defBackend.ProxyConnectTimeout
+	}
+
+	config.SendTimeout, err = parser.GetIntAnnotationFromMCI("proxy-send-timeout", mci)
+	if err != nil {
+		config.SendTimeout = defBackend.ProxySendTimeout
+	}
+
+	config.ReadTimeout, err = parser.GetIntAnnotationFromMCI("proxy-read-timeout", mci)
+	if err != nil {
+		config.ReadTimeout = defBackend.ProxyReadTimeout
+	}
+
+	config.BuffersNumber, err = parser.GetIntAnnotationFromMCI("proxy-buffers-number", mci)
+	if err != nil {
+		config.BuffersNumber = defBackend.ProxyBuffersNumber
+	}
+
+	config.BufferSize, err = parser.GetStringAnnotationFromMCI("proxy-buffer-size", mci)
+	if err != nil {
+		config.BufferSize = defBackend.ProxyBufferSize
+	}
+
+	config.CookiePath, err = parser.GetStringAnnotationFromMCI("proxy-cookie-path", mci)
+	if err != nil {
+		config.CookiePath = defBackend.ProxyCookiePath
+	}
+
+	config.CookieDomain, err = parser.GetStringAnnotationFromMCI("proxy-cookie-domain", mci)
+	if err != nil {
+		config.CookieDomain = defBackend.ProxyCookieDomain
+	}
+
+	config.BodySize, err = parser.GetStringAnnotationFromMCI("proxy-body-size", mci)
+	if err != nil {
+		config.BodySize = defBackend.ProxyBodySize
+	}
+
+	config.NextUpstream, err = parser.GetStringAnnotationFromMCI("proxy-next-upstream", mci)
+	if err != nil {
+		config.NextUpstream = defBackend.ProxyNextUpstream
+	}
+
+	config.NextUpstreamTimeout, err = parser.GetIntAnnotationFromMCI("proxy-next-upstream-timeout", mci)
+	if err != nil {
+		config.NextUpstreamTimeout = defBackend.ProxyNextUpstreamTimeout
+	}
+
+	config.NextUpstreamTries, err = parser.GetIntAnnotationFromMCI("proxy-next-upstream-tries", mci)
+	if err != nil {
+		config.NextUpstreamTries = defBackend.ProxyNextUpstreamTries
+	}
+
+	config.RequestBuffering, err = parser.GetStringAnnotationFromMCI("proxy-request-buffering", mci)
+	if err != nil {
+		config.RequestBuffering = defBackend.ProxyRequestBuffering
+	}
+
+	config.ProxyRedirectFrom, err = parser.GetStringAnnotationFromMCI("proxy-redirect-from", mci)
+	if err != nil {
+		config.ProxyRedirectFrom = defBackend.ProxyRedirectFrom
+	}
+
+	config.ProxyRedirectTo, err = parser.GetStringAnnotationFromMCI("proxy-redirect-to", mci)
+	if err != nil {
+		config.ProxyRedirectTo = defBackend.ProxyRedirectTo
+	}
+
+	config.ProxyBuffering, err = parser.GetStringAnnotationFromMCI("proxy-buffering", mci)
+	if err != nil {
+		config.ProxyBuffering = defBackend.ProxyBuffering
+	}
+
+	config.ProxyHTTPVersion, err = parser.GetStringAnnotationFromMCI("proxy-http-version", mci)
+	if err != nil {
+		config.ProxyHTTPVersion = defBackend.ProxyHTTPVersion
+	}
+
+	config.ProxyMaxTempFileSize, err = parser.GetStringAnnotationFromMCI("proxy-max-temp-file-size", mci)
 	if err != nil {
 		config.ProxyMaxTempFileSize = defBackend.ProxyMaxTempFileSize
 	}

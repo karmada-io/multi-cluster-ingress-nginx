@@ -17,6 +17,7 @@ limitations under the License.
 package satisfy
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -35,6 +36,17 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // Parse parses annotation contained in the ingress
 func (s satisfy) Parse(ing *networking.Ingress) (interface{}, error) {
 	satisfy, err := parser.GetStringAnnotation("satisfy", ing)
+
+	if err != nil || (satisfy != "any" && satisfy != "all") {
+		satisfy = ""
+	}
+
+	return satisfy, nil
+}
+
+// ParseByMCI parses annotation contained in the multiclusteringress
+func (s satisfy) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	satisfy, err := parser.GetStringAnnotationFromMCI("satisfy", mci)
 
 	if err != nil || (satisfy != "any" && satisfy != "all") {
 		satisfy = ""

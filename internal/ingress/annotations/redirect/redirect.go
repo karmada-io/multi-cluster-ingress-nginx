@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -76,6 +77,55 @@ func (r redirect) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	prc, err := parser.GetIntAnnotation("permanent-redirect-code", ing)
+	if err != nil && !errors.IsMissingAnnotations(err) {
+		return nil, err
+	}
+
+	if prc < http.StatusMultipleChoices || prc > http.StatusPermanentRedirect {
+		prc = defaultPermanentRedirectCode
+	}
+
+	if pr != "" || r3w {
+		return &Config{
+			URL:       pr,
+			Code:      prc,
+			FromToWWW: r3w,
+		}, nil
+	}
+
+	return nil, errors.ErrMissingAnnotations
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to create a redirect in the paths defined in the rule.
+// If the MultiClusterIngress contains both annotations the execution order is
+// temporal and then permanent
+func (r redirect) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	r3w, _ := parser.GetBoolAnnotationFromMCI("from-to-www-redirect", mci)
+
+	tr, err := parser.GetStringAnnotationFromMCI("temporal-redirect", mci)
+	if err != nil && !errors.IsMissingAnnotations(err) {
+		return nil, err
+	}
+
+	if tr != "" {
+		if err := isValidURL(tr); err != nil {
+			return nil, err
+		}
+
+		return &Config{
+			URL:       tr,
+			Code:      http.StatusFound,
+			FromToWWW: r3w,
+		}, nil
+	}
+
+	pr, err := parser.GetStringAnnotationFromMCI("permanent-redirect", mci)
+	if err != nil && !errors.IsMissingAnnotations(err) {
+		return nil, err
+	}
+
+	prc, err := parser.GetIntAnnotationFromMCI("permanent-redirect-code", mci)
 	if err != nil && !errors.IsMissingAnnotations(err) {
 		return nil, err
 	}

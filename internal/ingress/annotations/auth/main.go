@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	api "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/client-go/tools/cache"
@@ -143,6 +144,84 @@ func (a auth) Parse(ing *networking.Ingress) (interface{}, error) {
 	realm, _ := parser.GetStringAnnotation("auth-realm", ing)
 
 	passFilename := fmt.Sprintf("%v/%v-%v-%v.passwd", a.authDirectory, ing.GetNamespace(), ing.UID, secret.UID)
+
+	switch secretType {
+	case fileAuth:
+		err = dumpSecretAuthFile(passFilename, secret)
+		if err != nil {
+			return nil, err
+		}
+	case mapAuth:
+		err = dumpSecretAuthMap(passFilename, secret)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("invalid auth-secret-type in annotation, must be 'auth-file' or 'auth-map': %w", err),
+		}
+	}
+
+	return &Config{
+		Type:       at,
+		Realm:      realm,
+		File:       passFilename,
+		Secured:    true,
+		FileSHA:    file.SHA1(passFilename),
+		Secret:     name,
+		SecretType: secretType,
+	}, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to add authentication in the paths defined in the rule
+// and generated an htpasswd compatible file to be used as source
+// during the authentication process
+func (a auth) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	at, err := parser.GetStringAnnotationFromMCI("auth-type", mci)
+	if err != nil {
+		return nil, err
+	}
+
+	if !authTypeRegex.MatchString(at) {
+		return nil, ing_errors.NewLocationDenied("invalid authentication type")
+	}
+
+	var secretType string
+	secretType, err = parser.GetStringAnnotationFromMCI("auth-secret-type", mci)
+	if err != nil {
+		secretType = fileAuth
+	}
+
+	s, err := parser.GetStringAnnotationFromMCI("auth-secret", mci)
+	if err != nil {
+		return nil, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("error reading secret name from annotation: %w", err),
+		}
+	}
+
+	sns, sname, err := cache.SplitMetaNamespaceKey(s)
+	if err != nil {
+		return nil, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("error reading secret name from annotation: %w", err),
+		}
+	}
+
+	if sns == "" {
+		sns = mci.Namespace
+	}
+
+	name := fmt.Sprintf("%v/%v", sns, sname)
+	secret, err := a.r.GetSecret(name)
+	if err != nil {
+		return nil, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("unexpected error reading secret %s: %w", name, err),
+		}
+	}
+
+	realm, _ := parser.GetStringAnnotationFromMCI("auth-realm", mci)
+
+	passFilename := fmt.Sprintf("%v/%v-%v-%v.passwd", a.authDirectory, mci.GetNamespace(), mci.UID, secret.UID)
 
 	switch secretType {
 	case fileAuth:

@@ -17,6 +17,7 @@ limitations under the License.
 package ingress
 
 import (
+	karmadanetwork "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -248,6 +249,8 @@ type Location struct {
 	IsDefBackend bool `json:"isDefBackend"`
 	// Ingress returns the ingress from which this location was generated
 	Ingress *Ingress `json:"ingress"`
+	// MultiClusterIngress returns the multiClusterIngress from which this location was generated
+	MultiClusterIngress *MultiClusterIngress `json:"multiClusterIngress"`
 	// IngressPath original path defined in the ingress rule
 	IngressPath string `json:"ingressPath"`
 	// Backend describes the name of the backend to use.
@@ -405,6 +408,12 @@ type ProxyProtocol struct {
 type Ingress struct {
 	networking.Ingress `json:"-"`
 	ParsedAnnotations  *annotations.Ingress `json:"parsedAnnotations"`
+}
+
+// MultiClusterIngress holds the definition of a MultiClusterIngress plus its annotations
+type MultiClusterIngress struct {
+	karmadanetwork.MultiClusterIngress `json:"-"`
+	ParsedAnnotations                      *annotations.Ingress `json:"parsedAnnotations"`
 }
 
 // GeneralConfig holds the definition of lua general configuration data

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -102,6 +103,45 @@ func (a globalratelimit) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.Namespace = strings.Replace(string(ing.UID), "-", "", -1)
+	config.Limit = limit
+	config.WindowSize = int(windowSize.Seconds())
+	config.Key = key
+	config.IgnoredCIDRs = ignoredCIDRs
+
+	return config, nil
+}
+
+// ParseByMCI extracts globalratelimit annotations from the given multiclusteringress
+// and returns them structured as Config type
+func (a globalratelimit) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	config := &Config{}
+
+	limit, _ := parser.GetIntAnnotationFromMCI("global-rate-limit", mci)
+	rawWindowSize, _ := parser.GetStringAnnotationFromMCI("global-rate-limit-window", mci)
+
+	if limit == 0 || len(rawWindowSize) == 0 {
+		return config, nil
+	}
+
+	windowSize, err := time.ParseDuration(rawWindowSize)
+	if err != nil {
+		return config, ing_errors.LocationDenied{
+			Reason: fmt.Errorf("failed to parse 'global-rate-limit-window' value: %w", err),
+		}
+	}
+
+	key, _ := parser.GetStringAnnotationFromMCI("global-rate-limit-key", mci)
+	if len(key) == 0 {
+		key = defaultKey
+	}
+
+	rawIgnoredCIDRs, _ := parser.GetStringAnnotationFromMCI("global-rate-limit-ignored-cidrs", mci)
+	ignoredCIDRs, err := net.ParseCIDRs(rawIgnoredCIDRs)
+	if err != nil {
+		return nil, err
+	}
+
+	config.Namespace = strings.Replace(string(mci.UID), "-", "", -1)
 	config.Limit = limit
 	config.WindowSize = int(windowSize.Seconds())
 	config.Key = key

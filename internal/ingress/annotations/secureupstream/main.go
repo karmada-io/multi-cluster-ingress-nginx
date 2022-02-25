@@ -17,6 +17,7 @@ limitations under the License.
 package secureupstream
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/klog/v2"
 
@@ -42,6 +43,15 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // rule used to indicate if the upstream servers should use SSL
 func (a su) Parse(ing *networking.Ingress) (secure interface{}, err error) {
 	if ca, _ := parser.GetStringAnnotation("secure-verify-ca-secret", ing); ca != "" {
+		klog.Warningf("NOTE! secure-verify-ca-secret is not supported anymore. Please use proxy-ssl-secret instead")
+	}
+	return
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the upstream servers should use SSL
+func (a su) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (secure interface{}, err error) {
+	if ca, _ := parser.GetStringAnnotationFromMCI("secure-verify-ca-secret", mci); ca != "" {
 		klog.Warningf("NOTE! secure-verify-ca-secret is not supported anymore. Please use proxy-ssl-secret instead")
 	}
 	return

@@ -17,6 +17,7 @@ limitations under the License.
 package serviceupstream
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -37,6 +38,18 @@ func (s serviceUpstream) Parse(ing *networking.Ingress) (interface{}, error) {
 	defBackend := s.r.GetDefaultBackend()
 
 	val, err := parser.GetBoolAnnotation("service-upstream", ing)
+	// A missing annotation is not a problem, just use the default
+	if err == errors.ErrMissingAnnotations {
+		return defBackend.ServiceUpstream, nil
+	}
+
+	return val, nil
+}
+
+func (s serviceUpstream) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	defBackend := s.r.GetDefaultBackend()
+
+	val, err := parser.GetBoolAnnotationFromMCI("service-upstream", mci)
 	// A missing annotation is not a problem, just use the default
 	if err == errors.ErrMissingAnnotations {
 		return defBackend.ServiceUpstream, nil

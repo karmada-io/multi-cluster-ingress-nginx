@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -40,6 +41,32 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // used to add an alias to the provided hosts
 func (a alias) Parse(ing *networking.Ingress) (interface{}, error) {
 	val, err := parser.GetStringAnnotation("server-alias", ing)
+	if err != nil {
+		return []string{}, err
+	}
+
+	aliases := sets.NewString()
+	for _, alias := range strings.Split(val, ",") {
+		alias = strings.TrimSpace(alias)
+		if len(alias) == 0 {
+			continue
+		}
+
+		if !aliases.Has(alias) {
+			aliases.Insert(alias)
+		}
+	}
+
+	l := aliases.List()
+	sort.Strings(l)
+
+	return l, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress rule
+// used to add an alias to the provided hosts
+func (a alias) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	val, err := parser.GetStringAnnotationFromMCI("server-alias", mci)
 	if err != nil {
 		return []string{}, err
 	}

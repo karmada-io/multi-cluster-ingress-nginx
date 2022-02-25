@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -39,6 +40,27 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // custom http errors
 func (e customhttperrors) Parse(ing *networking.Ingress) (interface{}, error) {
 	c, err := parser.GetStringAnnotation("custom-http-errors", ing)
+	if err != nil {
+		return nil, err
+	}
+
+	cSplit := strings.Split(c, ",")
+	var codes []int
+	for _, i := range cSplit {
+		num, err := strconv.Atoi(i)
+		if err != nil {
+			return nil, err
+		}
+		codes = append(codes, num)
+	}
+
+	return codes, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress to use
+// custom http errors
+func (e customhttperrors) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	c, err := parser.GetStringAnnotationFromMCI("custom-http-errors", mci)
 	if err != nil {
 		return nil, err
 	}

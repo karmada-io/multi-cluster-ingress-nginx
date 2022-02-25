@@ -166,14 +166,14 @@ jobs:
           echo "loading docker images..."
           pigz -dc docker.tar.gz | docker load
 
-      - name: Test
-        env:
-          KIND_CLUSTER_NAME: kind
-          SKIP_CLUSTER_CREATION: true
-          SKIP_IMAGE_CREATION: true
-        run: |
-          kind get kubeconfig > $HOME/.kube/kind-config-kind
-          make kind-e2e-chart-tests
+#      - name: Test
+#        env:
+#          KIND_CLUSTER_NAME: kind
+#          SKIP_CLUSTER_CREATION: true
+#          SKIP_IMAGE_CREATION: true
+#        run: |
+#          kind get kubeconfig > $HOME/.kube/kind-config-kind
+#          make kind-e2e-chart-tests
 
   kubernetes:
     name: Kubernetes

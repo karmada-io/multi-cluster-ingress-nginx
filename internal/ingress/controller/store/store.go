@@ -28,6 +28,10 @@ import (
 	"time"
 
 	"github.com/eapache/channels"
+	karmadanetwork "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
+	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
+	karmadainformers "github.com/karmada-io/karmada/pkg/generated/informers/externalversions"
+        "github.com/karmada-io/karmada/pkg/util/gclient"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -39,7 +43,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
@@ -61,6 +64,9 @@ import (
 
 // IngressFilterFunc decides if an Ingress should be omitted or not
 type IngressFilterFunc func(*ingress.Ingress) bool
+
+// MCIFilterFunc decides if a MultiClusterIngress should be omitted or not
+type MCIFilterFunc func(*ingress.MultiClusterIngress) bool
 
 // Storer is the interface that wraps the required methods to gather information
 // about ingresses, services, secrets and ingress annotations.
@@ -85,6 +91,9 @@ type Storer interface {
 
 	// ListIngresses returns a list of all Ingresses in the store.
 	ListIngresses() []*ingress.Ingress
+
+	// ListMultiClusterIngresses returns a list of all MultiClusterIngresses in the store.S
+	ListMultiClusterIngresses() []*ingress.MultiClusterIngress
 
 	// GetLocalSSLCert returns the local copy of a SSLCert
 	GetLocalSSLCert(name string) (*ingress.SSLCert, error)
@@ -126,27 +135,30 @@ type Event struct {
 
 // Informer defines the required SharedIndexInformers that interact with the API server.
 type Informer struct {
-	Ingress       cache.SharedIndexInformer
-	IngressClass  cache.SharedIndexInformer
-	Endpoint      cache.SharedIndexInformer
-	EndpointSlice cache.SharedIndexInformer
-	Service       cache.SharedIndexInformer
-	Secret        cache.SharedIndexInformer
-	ConfigMap     cache.SharedIndexInformer
-	Namespace     cache.SharedIndexInformer
+	Ingress             cache.SharedIndexInformer
+	MultiClusterIngress cache.SharedIndexInformer
+	IngressClass        cache.SharedIndexInformer
+	Endpoint            cache.SharedIndexInformer
+	EndpointSlice       cache.SharedIndexInformer
+	Service             cache.SharedIndexInformer
+	Secret              cache.SharedIndexInformer
+	ConfigMap           cache.SharedIndexInformer
+	Namespace           cache.SharedIndexInformer
 }
 
 // Lister contains object listers (stores).
 type Lister struct {
-	Ingress               IngressLister
-	IngressClass          IngressClassLister
-	Service               ServiceLister
-	Endpoint              EndpointLister
-	EndpointSlice         EndpointSliceLister
-	Secret                SecretLister
-	ConfigMap             ConfigMapLister
-	Namespace             NamespaceLister
-	IngressWithAnnotation IngressWithAnnotationsLister
+	Ingress                           IngressLister
+	MultiClusterIngress               MultiClusterIngressLister
+	IngressClass                      IngressClassLister
+	Service                           ServiceLister
+	Endpoint                          EndpointLister
+	EndpointSlice                     EndpointSliceLister
+	Secret                            SecretLister
+	ConfigMap                         ConfigMapLister
+	Namespace                         NamespaceLister
+	IngressWithAnnotation             IngressWithAnnotationsLister
+	MultiClusterIngressWithAnnotation MultiClusterIngressWithAnnotationsLister
 }
 
 // NotExistsError is returned when an object does not exist in a local store.
@@ -205,6 +217,13 @@ func (i *Informer) Run(stopCh chan struct{}) {
 	) {
 		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
+
+	go i.MultiClusterIngress.Run(stopCh)
+	if !cache.WaitForCacheSync(stopCh,
+		i.MultiClusterIngress.HasSynced,
+	) {
+		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
+	}
 }
 
 // k8sStore internal Storer implementation using informers and thread safe stores
@@ -231,6 +250,10 @@ type k8sStore struct {
 	// secret in the annotations.
 	secretIngressMap ObjectRefMap
 
+	// secretMCIMap contains information about which multiclusteringress references a
+	// secret in the annotations.
+	secretMCIMap ObjectRefMap
+
 	// updateCh
 	updateCh *channels.RingChannel
 
@@ -250,6 +273,7 @@ func New(
 	configmap, tcp, udp, defaultSSLCertificate string,
 	resyncPeriod time.Duration,
 	client clientset.Interface,
+	karmadaClient karmadaclientset.Interface,
 	updateCh *channels.RingChannel,
 	disableCatchAll bool,
 	icConfig *ingressclass.IngressClassConfiguration) Storer {
@@ -263,6 +287,7 @@ func New(
 		syncSecretMu:          &sync.Mutex{},
 		backendConfigMu:       &sync.RWMutex{},
 		secretIngressMap:      NewObjectRefMap(),
+		secretMCIMap:          NewObjectRefMap(),
 		defaultSSLCertificate: defaultSSLCertificate,
 	}
 
@@ -271,7 +296,7 @@ func New(
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{
 		Interface: client.CoreV1().Events(namespace),
 	})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{
+	recorder := eventBroadcaster.NewRecorder(gclient.NewSchema(), corev1.EventSource{
 		Component: "nginx-ingress-controller",
 	})
 
@@ -279,6 +304,7 @@ func New(
 	store.annotations = annotations.NewAnnotationExtractor(store)
 
 	store.listers.IngressWithAnnotation.Store = cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
+	store.listers.MultiClusterIngressWithAnnotation.Store = cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
 
 	// As we currently do not filter out kubernetes objects we list, we can
 	// retrieve a huge amount of data from the API server.
@@ -312,6 +338,10 @@ func New(
 		informers.WithNamespace(namespace),
 	)
 
+	karmadaInfFactory := karmadainformers.NewSharedInformerFactoryWithOptions(karmadaClient, resyncPeriod,
+		karmadainformers.WithNamespace(namespace),
+	)
+
 	// create informers factory for configmaps
 	infFactoryConfigmaps := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
 		informers.WithNamespace(namespace),
@@ -326,6 +356,9 @@ func New(
 
 	store.informers.Ingress = infFactory.Networking().V1().Ingresses().Informer()
 	store.listers.Ingress.Store = store.informers.Ingress.GetStore()
+
+	store.informers.MultiClusterIngress = karmadaInfFactory.Networking().V1alpha1().MultiClusterIngresses().Informer()
+	store.listers.MultiClusterIngress.Store = store.informers.MultiClusterIngress.GetStore()
 
 	if !icConfig.IgnoreIngressClass {
 		store.informers.IngressClass = infFactory.Networking().V1().IngressClasses().Informer()
@@ -501,6 +534,130 @@ func New(
 		},
 	}
 
+	mciDeleteHandler := func(obj interface{}) {
+		mci, ok := toMultiClusterIngress(obj)
+		if !ok {
+			// If we reached here it means the multiclusteringress was deleted but its final state is unrecorded.
+			tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+			if !ok {
+				klog.ErrorS(nil, "Error obtaining object from tombstone", "key", obj)
+				return
+			}
+			mci, ok = tombstone.Obj.(*karmadanetwork.MultiClusterIngress)
+			if !ok {
+				klog.Errorf("Tombstone contained object that is not an MultiClusterIngress: %#v", obj)
+				return
+			}
+		}
+
+		if !watchedNamespace(mci.Namespace) {
+			return
+		}
+
+		_, err := store.GetIngressClassByMCI(mci, icConfig)
+		if err != nil {
+			klog.InfoS("Ignoring multiclusteringress because of error while validating ingress class", "multiclusteringress", klog.KObj(mci), "error", err)
+			return
+		}
+
+		if hasCatchAllIngressRule(mci.Spec) && disableCatchAll {
+			klog.InfoS("Ignoring delete for catch-all because of --disable-catch-all", "multiclusteringress", klog.KObj(mci))
+			return
+		}
+
+		_ = store.listers.MultiClusterIngressWithAnnotation.Delete(mci)
+
+		key := k8s.MetaNamespaceKey(mci)
+		store.secretMCIMap.Delete(key)
+
+		updateCh.In() <- Event{
+			Type: DeleteEvent,
+			Obj:  obj,
+		}
+	}
+
+	mciEventHandler := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			mci, _ := toMultiClusterIngress(obj)
+
+			if !watchedNamespace(mci.Namespace) {
+				return
+			}
+
+			ingressClass, err := store.GetIngressClassByMCI(mci, icConfig)
+			if err != nil {
+				klog.InfoS("Ignoring multiclusteringress because of error while validating ingressClass", "multiclusteringress", klog.KObj(mci), "error", err)
+				return
+			}
+
+			klog.InfoS("Found valid IngressClass", "multiclusteringress", klog.KObj(mci), "ingressclass", ingressClass)
+
+			if hasCatchAllIngressRule(mci.Spec) && disableCatchAll {
+				klog.InfoS("Ignoring add for catch-all multiclusteringress because of --disable-catch-all", "multiclusteringress", klog.KObj(mci))
+				return
+			}
+
+			recorder.Eventf(mci, corev1.EventTypeNormal, "Sync", "Scheduled for sync")
+
+			store.syncMultiClusterIngress(mci)
+			store.updateSecretMCIMap(mci)
+			store.syncSecretsByMCI(mci)
+
+			updateCh.In() <- Event{
+				Type: CreateEvent,
+				Obj:  obj,
+			}
+		},
+		DeleteFunc: mciDeleteHandler,
+		UpdateFunc: func(old, cur interface{}) {
+			oldMCI, _ := toMultiClusterIngress(old)
+			curMCI, _ := toMultiClusterIngress(cur)
+
+			if !watchedNamespace(oldMCI.Namespace) {
+				return
+			}
+
+			var errOld, errCur error
+			var ingressClassCur string
+			if !icConfig.IgnoreIngressClass {
+				_, errOld = store.GetIngressClassByMCI(oldMCI, icConfig)
+				ingressClassCur, errCur = store.GetIngressClassByMCI(curMCI, icConfig)
+			}
+
+			if errOld != nil && errCur == nil {
+				if hasCatchAllIngressRule(curMCI.Spec) && disableCatchAll {
+					klog.InfoS("ignoring update for catch-all multiclusteringress because of --disable-catch-all", "multiclusteringress", klog.KObj(curMCI))
+					return
+				}
+				klog.InfoS("creating multiclusteringress", "multiclusteringress", klog.KObj(curMCI), "ingressclass", ingressClassCur)
+				recorder.Eventf(curMCI, corev1.EventTypeNormal, "Sync", "Scheduled for sync")
+			} else if errOld == nil && errCur != nil {
+				klog.InfoS("removing multiclusteringress because of unknown ingressclass", "multiclusteringress", klog.KObj(curMCI))
+				mciDeleteHandler(old)
+				return
+			} else if errCur == nil && !reflect.DeepEqual(old, cur) {
+				if hasCatchAllIngressRule(curMCI.Spec) && disableCatchAll {
+					klog.InfoS("ignoring update for catch-all ) and delete old one because of --disable-catch-all", ")", klog.KObj(curMCI))
+					mciDeleteHandler(old)
+					return
+				}
+				recorder.Eventf(curMCI, corev1.EventTypeNormal, "Sync", "Scheduled for sync")
+			} else {
+				klog.V(3).InfoS("No changes on multiclusteringress. Skipping update", "multiclusteringress", klog.KObj(curMCI))
+				return
+			}
+
+			store.syncMultiClusterIngress(curMCI)
+			store.updateSecretMCIMap(curMCI)
+			store.syncSecretsByMCI(curMCI)
+
+			updateCh.In() <- Event{
+				Type: UpdateEvent,
+				Obj:  cur,
+			}
+		},
+	}
+
 	ingressClassEventHandler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			ingressclass := obj.(*networkingv1.IngressClass)
@@ -589,6 +746,24 @@ func New(
 					Obj:  obj,
 				}
 			}
+
+			// find references in multiclusteringresses and update local ssl certs
+			if mcis := store.secretMCIMap.Reference(key); len(mcis) > 0 {
+				klog.InfoS("Secret was added and it is used in multiclusteringress annotations. Parsing", "secret", key)
+				for _, mciKey := range mcis {
+					mci, err := store.getMultiClusterIngress(mciKey)
+					if err != nil {
+						klog.Errorf("could not find MultiClusterIngress %v in local store", mciKey)
+						continue
+					}
+					store.syncMultiClusterIngress(mci)
+					store.syncSecretsByMCI(mci)
+				}
+				updateCh.In() <- Event{
+					Type: CreateEvent,
+					Obj:  obj,
+				}
+			}
 		},
 		UpdateFunc: func(old, cur interface{}) {
 			if !reflect.DeepEqual(old, cur) {
@@ -614,6 +789,24 @@ func New(
 						}
 						store.syncSecrets(ing)
 						store.syncIngress(ing)
+					}
+					updateCh.In() <- Event{
+						Type: UpdateEvent,
+						Obj:  cur,
+					}
+				}
+
+				// find references in multiclusteringresses and update local ssl certs
+				if mcis := store.secretMCIMap.Reference(key); len(mcis) > 0 {
+					klog.InfoS("secret was updated and it is used in multiclusteringress annotations. Parsing", "secret", key)
+					for _, mciKey := range mcis {
+						mci, err := store.getMultiClusterIngress(mciKey)
+						if err != nil {
+							klog.ErrorS(err, "could not find MultiClusterIngress in local store", "multiclusteringress", mciKey)
+							continue
+						}
+						store.syncSecretsByMCI(mci)
+						store.syncMultiClusterIngress(mci)
 					}
 					updateCh.In() <- Event{
 						Type: UpdateEvent,
@@ -655,6 +848,24 @@ func New(
 						continue
 					}
 					store.syncIngress(ing)
+				}
+
+				updateCh.In() <- Event{
+					Type: DeleteEvent,
+					Obj:  obj,
+				}
+			}
+
+			// find references in multiclusteringresses
+			if mcis := store.secretMCIMap.Reference(key); len(mcis) > 0 {
+				klog.InfoS("secret was deleted and it is used in multiclusteringress annotations. Parsing", "secret", key)
+				for _, mciKey := range mcis {
+					mci, err := store.getMultiClusterIngress(mciKey)
+					if err != nil {
+						klog.Errorf("could not find MultiClusterIngress %v in local store", mciKey)
+						continue
+					}
+					store.syncMultiClusterIngress(mci)
 				}
 
 				updateCh.In() <- Event{
@@ -751,6 +962,25 @@ func New(
 			}
 		}
 
+		mcis := store.listers.MultiClusterIngressWithAnnotation.List()
+		for _, mciKey := range mcis {
+			key := k8s.MetaNamespaceKey(mciKey)
+			mci, err := store.getMultiClusterIngress(key)
+			if err != nil {
+				klog.Errorf("could not find MultiClusterIngress %v in local store: %v", key, err)
+				continue
+			}
+
+			if parser.AnnotationsReferencesConfigmapFromMCI(mci) {
+				store.syncMultiClusterIngress(mci)
+				continue
+			}
+
+			if triggerUpdate {
+				store.syncMultiClusterIngress(mci)
+			}
+		}
+
 		if triggerUpdate {
 			updateCh.In() <- Event{
 				Type: ConfigurationEvent,
@@ -811,6 +1041,7 @@ func New(
 	}
 
 	store.informers.Ingress.AddEventHandler(ingEventHandler)
+	store.informers.MultiClusterIngress.AddEventHandler(mciEventHandler)
 	if !icConfig.IgnoreIngressClass {
 		store.informers.IngressClass.AddEventHandler(ingressClassEventHandler)
 	}

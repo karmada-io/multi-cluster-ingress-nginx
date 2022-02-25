@@ -18,16 +18,11 @@ package annotations
 
 import (
 	"github.com/imdario/mergo"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/canary"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/modsecurity"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/proxyssl"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/sslcipher"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/streamsnippet"
-	"k8s.io/klog/v2"
-
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/alias"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/auth"
@@ -35,6 +30,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/authreqglobal"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/authtls"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/backendprotocol"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/canary"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/clientbodybuffersize"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/connection"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/cors"
@@ -48,10 +44,12 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/loadbalancing"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/log"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/mirror"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/modsecurity"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/opentracing"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/portinredirect"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/proxy"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/proxyssl"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/ratelimit"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/redirect"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/rewrite"
@@ -61,7 +59,9 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/serviceupstream"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/sessionaffinity"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/snippet"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/sslcipher"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/sslpassthrough"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/streamsnippet"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/upstreamhashby"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/upstreamvhost"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/xforwardedprefix"
@@ -208,6 +208,57 @@ func (e Extractor) Extract(ing *networking.Ingress) *Ingress {
 			}
 
 			klog.V(5).ErrorS(err, "error reading Ingress annotation", "name", name, "ingress", klog.KObj(ing))
+		}
+
+		if val != nil {
+			data[name] = val
+		}
+	}
+
+	err := mergo.MapWithOverwrite(pia, data)
+	if err != nil {
+		klog.ErrorS(err, "unexpected error merging extracted annotations")
+	}
+
+	return pia
+}
+
+// ExtractFromMCI extracts the annotations from a MultiClusterIngress
+func (e Extractor) ExtractFromMCI(mci *karmadanetworking.MultiClusterIngress) *Ingress {
+	pia := &Ingress{
+		ObjectMeta: mci.ObjectMeta,
+	}
+
+	data := make(map[string]interface{})
+	for name, annotationParser := range e.annotations {
+		val, err := annotationParser.ParseByMCI(mci)
+		klog.V(5).InfoS("Parsing MultiClusterIngress annotation", "name", name, "multiclusteringress", klog.KObj(mci), "value", val)
+		if err != nil {
+			if errors.IsMissingAnnotations(err) {
+				continue
+			}
+
+			if !errors.IsLocationDenied(err) {
+				continue
+			}
+
+			if name == "CertificateAuth" && data[name] == nil {
+				data[name] = authtls.Config{
+					AuthTLSError: err.Error(),
+				}
+				// avoid mapping the result from the annotation
+				val = nil
+			}
+
+			_, alreadyDenied := data[DeniedKeyName]
+			if !alreadyDenied {
+				errString := err.Error()
+				data[DeniedKeyName] = &errString
+				klog.ErrorS(err, "error reading MultiClusterIngress annotation", "name", name, "multiclusteringress", klog.KObj(mci))
+				continue
+			}
+
+			klog.V(5).ErrorS(err, "error reading MultiClusterIngress annotation", "name", name, "multiclusteringress", klog.KObj(mci))
 		}
 
 		if val != nil {

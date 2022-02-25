@@ -17,6 +17,7 @@ limitations under the License.
 package canary
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -81,6 +82,55 @@ func (c canary) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.Cookie, err = parser.GetStringAnnotation("canary-by-cookie", ing)
+	if err != nil {
+		config.Cookie = ""
+	}
+
+	if !config.Enabled && (config.Weight > 0 || len(config.Header) > 0 || len(config.HeaderValue) > 0 || len(config.Cookie) > 0 ||
+		len(config.HeaderPattern) > 0) {
+		return nil, errors.NewInvalidAnnotationConfiguration("canary", "configured but not enabled")
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the canary should be enabled and with what config
+func (c canary) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	config := &Config{}
+	var err error
+
+	config.Enabled, err = parser.GetBoolAnnotationFromMCI("canary", mci)
+	if err != nil {
+		config.Enabled = false
+	}
+
+	config.Weight, err = parser.GetIntAnnotationFromMCI("canary-weight", mci)
+	if err != nil {
+		config.Weight = 0
+	}
+
+	config.WeightTotal, err = parser.GetIntAnnotationFromMCI("canary-weight-total", mci)
+	if err != nil {
+		config.WeightTotal = 100
+	}
+
+	config.Header, err = parser.GetStringAnnotationFromMCI("canary-by-header", mci)
+	if err != nil {
+		config.Header = ""
+	}
+
+	config.HeaderValue, err = parser.GetStringAnnotationFromMCI("canary-by-header-value", mci)
+	if err != nil {
+		config.HeaderValue = ""
+	}
+
+	config.HeaderPattern, err = parser.GetStringAnnotationFromMCI("canary-by-header-pattern", mci)
+	if err != nil {
+		config.HeaderPattern = ""
+	}
+
+	config.Cookie, err = parser.GetStringAnnotationFromMCI("canary-by-cookie", mci)
 	if err != nil {
 		config.Cookie = ""
 	}

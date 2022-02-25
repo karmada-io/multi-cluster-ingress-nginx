@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/klog/v2"
 
@@ -161,6 +162,64 @@ func (c cors) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.CorsMaxAge, err = parser.GetIntAnnotation("cors-max-age", ing)
+	if err != nil {
+		config.CorsMaxAge = defaultCorsMaxAge
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the location/s should allows CORS
+func (c cors) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	config.CorsEnabled, err = parser.GetBoolAnnotationFromMCI("enable-cors", mci)
+	if err != nil {
+		config.CorsEnabled = false
+	}
+
+	unparsedOrigins, err := parser.GetStringAnnotationFromMCI("cors-allow-origin", mci)
+	if err == nil {
+		config.CorsAllowOrigin = strings.Split(unparsedOrigins, ",")
+		for i, origin := range config.CorsAllowOrigin {
+			origin = strings.TrimSpace(origin)
+			if origin == "*" {
+				config.CorsAllowOrigin = []string{"*"}
+				break
+			}
+			if !corsOriginRegex.MatchString(origin) {
+				klog.Errorf("Error parsing cors-allow-origin parameters. Supplied incorrect origin: %s. Skipping.", origin)
+				config.CorsAllowOrigin = append(config.CorsAllowOrigin[:i], config.CorsAllowOrigin[i+1:]...)
+			}
+			klog.Infof("Current config.corsAllowOrigin %v", config.CorsAllowOrigin)
+		}
+	} else {
+		config.CorsAllowOrigin = []string{"*"}
+	}
+
+	config.CorsAllowHeaders, err = parser.GetStringAnnotationFromMCI("cors-allow-headers", mci)
+	if err != nil || !corsHeadersRegex.MatchString(config.CorsAllowHeaders) {
+		config.CorsAllowHeaders = defaultCorsHeaders
+	}
+
+	config.CorsAllowMethods, err = parser.GetStringAnnotationFromMCI("cors-allow-methods", mci)
+	if err != nil || !corsMethodsRegex.MatchString(config.CorsAllowMethods) {
+		config.CorsAllowMethods = defaultCorsMethods
+	}
+
+	config.CorsAllowCredentials, err = parser.GetBoolAnnotationFromMCI("cors-allow-credentials", mci)
+	if err != nil {
+		config.CorsAllowCredentials = true
+	}
+
+	config.CorsExposeHeaders, err = parser.GetStringAnnotationFromMCI("cors-expose-headers", mci)
+	if err != nil || !corsExposeHeadersRegex.MatchString(config.CorsExposeHeaders) {
+		config.CorsExposeHeaders = ""
+	}
+
+	config.CorsMaxAge, err = parser.GetIntAnnotationFromMCI("cors-max-age", mci)
 	if err != nil {
 		config.CorsMaxAge = defaultCorsMaxAge
 	}

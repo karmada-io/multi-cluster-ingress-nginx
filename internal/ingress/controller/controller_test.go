@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/eapache/channels"
+	karmadafake "github.com/karmada-io/karmada/pkg/generated/clientset/versioned/fake"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -90,6 +91,10 @@ func (fakeIngressStore) GetServiceEndpointSlices(key string) ([]*discoveryv1.End
 
 func (fis fakeIngressStore) ListIngresses() []*ingress.Ingress {
 	return fis.ingresses
+}
+
+func (fis fakeIngressStore) ListMultiClusterIngresses() []*ingress.MultiClusterIngress {
+	return nil
 }
 
 func (fis fakeIngressStore) FilterIngresses(ingresses []*ingress.Ingress, filterFunc store.IngressFilterFunc) []*ingress.Ingress {
@@ -2363,6 +2368,7 @@ func newNGINXController(t *testing.T) *NGINXController {
 	ns := v1.NamespaceDefault
 
 	clientSet := fake.NewSimpleClientset()
+	karmadaClientSet := karmadafake.NewSimpleClientset()
 
 	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2395,6 +2401,7 @@ func newNGINXController(t *testing.T) *NGINXController {
 		"",
 		10*time.Minute,
 		clientSet,
+		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,
 		&ingressclass.IngressClassConfiguration{
@@ -2433,6 +2440,7 @@ func newDynamicNginxController(t *testing.T, setConfigMap func(string) *v1.Confi
 	ns := v1.NamespaceDefault
 
 	clientSet := fake.NewSimpleClientset()
+	karmadaClientSet := karmadafake.NewSimpleClientset()
 	configMap := setConfigMap(ns)
 
 	_, err := clientSet.CoreV1().ConfigMaps(ns).Create(context.TODO(), configMap, metav1.CreateOptions{})
@@ -2459,6 +2467,7 @@ func newDynamicNginxController(t *testing.T, setConfigMap func(string) *v1.Confi
 		"",
 		10*time.Minute,
 		clientSet,
+		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,
 		&ingressclass.IngressClassConfiguration{

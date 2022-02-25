@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -72,7 +73,7 @@ func main() {
 		klog.Fatal(err)
 	}
 
-	kubeClient, err := createApiserverClient(conf.APIServerHost, conf.RootCAFile, conf.KubeConfigFile)
+	kubeClient, karmadaClient, err := createApiserverClient(conf.APIServerHost, conf.RootCAFile, conf.KubeConfigFile)
 	if err != nil {
 		handleFatalInitError(err)
 	}
@@ -117,6 +118,7 @@ func main() {
 		}
 	}
 	conf.Client = kubeClient
+	conf.KarmadaClient = karmadaClient
 
 	err = k8s.GetIngressPod(kubeClient)
 	if err != nil {
@@ -189,10 +191,10 @@ func handleSigterm(ngx *controller.NGINXController, exit exiter) {
 // If neither apiserverHost nor kubeConfig is passed in, we assume the
 // controller runs inside Kubernetes and fallback to the in-cluster config. If
 // the in-cluster config is missing or fails, we fallback to the default config.
-func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kubernetes.Clientset, error) {
+func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kubernetes.Clientset, *karmadaclientset.Clientset, error) {
 	cfg, err := clientcmd.BuildConfigFromFlags(apiserverHost, kubeConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// TODO: remove after k8s v1.22
@@ -224,7 +226,12 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	karmadaClient, err := karmadaclientset.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var v *discovery.Info
@@ -256,7 +263,7 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 
 	// err is returned in case of timeout in the exponential backoff (ErrWaitTimeout)
 	if err != nil {
-		return nil, lastErr
+		return nil, nil, lastErr
 	}
 
 	// this should not happen, warn the user
@@ -273,7 +280,7 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 		"platform", v.Platform,
 	)
 
-	return client, nil
+	return client, karmadaClient, nil
 }
 
 // Handler for fatal init errors. Prints a verbose error message and exits.

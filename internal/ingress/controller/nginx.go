@@ -37,10 +37,10 @@ import (
 
 	proxyproto "github.com/armon/go-proxyproto"
 	"github.com/eapache/channels"
+        "github.com/karmada-io/karmada/pkg/util/gclient"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/kubernetes/scheme"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/flowcontrol"
@@ -88,7 +88,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector) *NGINXContro
 		cfg:             config,
 		syncRateLimiter: flowcontrol.NewTokenBucketRateLimiter(config.SyncRateLimit, 1),
 
-		recorder: eventBroadcaster.NewRecorder(scheme.Scheme, apiv1.EventSource{
+		recorder: eventBroadcaster.NewRecorder(gclient.NewSchema(), apiv1.EventSource{
 			Component: "nginx-ingress-controller",
 		}),
 
@@ -129,6 +129,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector) *NGINXContro
 		config.DefaultSSLCertificate,
 		config.ResyncPeriod,
 		config.Client,
+		config.KarmadaClient,
 		n.updateCh,
 		config.DisableCatchAll,
 		config.IngressClassConfiguration)
@@ -138,6 +139,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector) *NGINXContro
 	if config.UpdateStatus {
 		n.syncStatus = status.NewStatusSyncer(status.Config{
 			Client:                 config.Client,
+			KarmadaClient:          config.KarmadaClient,
 			PublishService:         config.PublishService,
 			PublishStatusAddress:   config.PublishStatusAddress,
 			IngressLister:          n.store,

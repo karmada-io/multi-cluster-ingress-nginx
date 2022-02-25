@@ -25,14 +25,14 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog/v2"
-
+	karmadaclientset "github.com/karmada-io/karmada/pkg/generated/clientset/versioned"
 	pool "gopkg.in/go-playground/pool.v3"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 
 	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/k8s"
@@ -53,11 +53,14 @@ type Syncer interface {
 type ingressLister interface {
 	// ListIngresses returns the list of Ingresses
 	ListIngresses() []*ingress.Ingress
+    // ListMultiClusterIngresses returns the list of MultiClusterIngresses
+	ListMultiClusterIngresses() []*ingress.MultiClusterIngress
 }
 
 // Config ...
 type Config struct {
-	Client clientset.Interface
+	Client        clientset.Interface
+	KarmadaClient karmadaclientset.Interface
 
 	PublishService string
 
@@ -260,7 +263,8 @@ func standardizeLoadBalancerIngresses(lbi []apiv1.LoadBalancerIngress) []apiv1.L
 
 // updateStatus changes the status information of Ingress rules
 func (s *statusSync) updateStatus(newIngressPoint []apiv1.LoadBalancerIngress) {
-	ings := s.IngressLister.ListIngresses()
+	//ings := s.IngressLister.ListIngresses()
+	mcis := s.IngressLister.ListMultiClusterIngresses()
 
 	p := pool.NewLimited(10)
 	defer p.Close()
@@ -268,15 +272,15 @@ func (s *statusSync) updateStatus(newIngressPoint []apiv1.LoadBalancerIngress) {
 	batch := p.Batch()
 	sort.SliceStable(newIngressPoint, lessLoadBalancerIngress(newIngressPoint))
 
-	for _, ing := range ings {
-		curIPs := ing.Status.LoadBalancer.Ingress
+	for _, mci := range mcis {
+		curIPs := mci.Status.LoadBalancer.Ingress
 		sort.SliceStable(curIPs, lessLoadBalancerIngress(curIPs))
 		if ingressSliceEqual(curIPs, newIngressPoint) {
-			klog.V(3).InfoS("skipping update of Ingress (no change)", "namespace", ing.Namespace, "ingress", ing.Name)
+			klog.V(3).InfoS("skipping update of MultiClusterIngress (no change)", "namespace", mci.Namespace, "ingress", mci.Name)
 			continue
 		}
 
-		batch.Queue(runUpdate(ing, newIngressPoint, s.Client))
+		batch.Queue(runUpdateMCI(mci, newIngressPoint, s.KarmadaClient))
 	}
 
 	batch.QueueComplete()
@@ -301,6 +305,30 @@ func runUpdate(ing *ingress.Ingress, status []apiv1.LoadBalancerIngress,
 		_, err = ingClient.UpdateStatus(context.TODO(), currIng, metav1.UpdateOptions{})
 		if err != nil {
 			klog.Warningf("error updating ingress rule: %v", err)
+		}
+
+		return true, nil
+	}
+}
+
+func runUpdateMCI(mci *ingress.MultiClusterIngress, status []apiv1.LoadBalancerIngress,
+	karmadaClient karmadaclientset.Interface) pool.WorkFunc {
+	return func(wu pool.WorkUnit) (interface{}, error) {
+		if wu.IsCancelled() {
+			return nil, nil
+		}
+
+		mciClient := karmadaClient.NetworkingV1alpha1().MultiClusterIngresses(mci.Namespace)
+		currMCI, err := mciClient.Get(context.TODO(), mci.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("unexpected error searching MultiClusterIngress %s/%s: %w", mci.Namespace, mci.Name, err)
+		}
+
+		klog.InfoS("updating MultiClusterIngress status", "namespace", currMCI.Namespace, "multiclusteringress", currMCI.Name, "currentValue", currMCI.Status.LoadBalancer.Ingress, "newValue", status)
+		currMCI.Status.LoadBalancer.Ingress = status
+		_, err = mciClient.UpdateStatus(context.TODO(), currMCI, metav1.UpdateOptions{})
+		if err != nil {
+			klog.Warningf("error updating multiclusteringress rules: %v", err)
 		}
 
 		return true, nil

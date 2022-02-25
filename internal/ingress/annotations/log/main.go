@@ -17,6 +17,7 @@ limitations under the License.
 package log
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -63,6 +64,25 @@ func (l log) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.Rewrite, err = parser.GetBoolAnnotation("enable-rewrite-log", ing)
+	if err != nil {
+		config.Rewrite = false
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to indicate if the location/s should enable logs
+func (l log) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	config.Access, err = parser.GetBoolAnnotationFromMCI("enable-access-log", mci)
+	if err != nil {
+		config.Access = true
+	}
+
+	config.Rewrite, err = parser.GetBoolAnnotationFromMCI("enable-rewrite-log", mci)
 	if err != nil {
 		config.Rewrite = false
 	}

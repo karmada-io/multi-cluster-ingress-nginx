@@ -17,6 +17,7 @@ limitations under the License.
 package http2pushpreload
 
 import (
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
@@ -36,4 +37,10 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 // used to add http2 push preload to the server
 func (h2pp http2PushPreload) Parse(ing *networking.Ingress) (interface{}, error) {
 	return parser.GetBoolAnnotation("http2-push-preload", ing)
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress rule
+// used to add http2 push preload to the server
+func (h2pp http2PushPreload) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	return parser.GetBoolAnnotationFromMCI("http2-push-preload", mci)
 }

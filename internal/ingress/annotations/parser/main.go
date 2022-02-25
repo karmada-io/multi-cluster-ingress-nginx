@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -39,6 +40,7 @@ var (
 // IngressAnnotation has a method to parse annotations located in Ingress
 type IngressAnnotation interface {
 	Parse(ing *networking.Ingress) (interface{}, error)
+	ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error)
 }
 
 type ingAnnotations map[string]string
@@ -91,6 +93,17 @@ func checkAnnotation(name string, ing *networking.Ingress) error {
 	return nil
 }
 
+func checkAnnotationWithMCi(name string, mci *karmadanetworking.MultiClusterIngress) error {
+	if mci == nil || len(mci.GetAnnotations()) == 0 {
+		return errors.ErrMissingAnnotations
+	}
+	if name == "" {
+		return errors.ErrInvalidAnnotationName
+	}
+
+	return nil
+}
+
 // GetBoolAnnotation extracts a boolean from an Ingress annotation
 func GetBoolAnnotation(name string, ing *networking.Ingress) (bool, error) {
 	v := GetAnnotationWithPrefix(name)
@@ -99,6 +112,16 @@ func GetBoolAnnotation(name string, ing *networking.Ingress) (bool, error) {
 		return false, err
 	}
 	return ingAnnotations(ing.GetAnnotations()).parseBool(v)
+}
+
+// GetBoolAnnotationFromMCI extracts a boolean from a MultiClusterIngress annotation
+func GetBoolAnnotationFromMCI(name string, mci *karmadanetworking.MultiClusterIngress) (bool, error) {
+	v := GetAnnotationWithPrefix(name)
+	err := checkAnnotationWithMCi(v, mci)
+	if err != nil {
+		return false, err
+	}
+	return ingAnnotations(mci.GetAnnotations()).parseBool(v)
 }
 
 // GetStringAnnotation extracts a string from an Ingress annotation
@@ -112,6 +135,17 @@ func GetStringAnnotation(name string, ing *networking.Ingress) (string, error) {
 	return ingAnnotations(ing.GetAnnotations()).parseString(v)
 }
 
+// GetStringAnnotationFromMCI extracts a string from an MultiClusterIngress annotation
+func GetStringAnnotationFromMCI(name string, mci *karmadanetworking.MultiClusterIngress) (string, error) {
+	v := GetAnnotationWithPrefix(name)
+	err := checkAnnotationWithMCi(v, mci)
+	if err != nil {
+		return "", err
+	}
+
+	return ingAnnotations(mci.GetAnnotations()).parseString(v)
+}
+
 // GetIntAnnotation extracts an int from an Ingress annotation
 func GetIntAnnotation(name string, ing *networking.Ingress) (int, error) {
 	v := GetAnnotationWithPrefix(name)
@@ -120,6 +154,16 @@ func GetIntAnnotation(name string, ing *networking.Ingress) (int, error) {
 		return 0, err
 	}
 	return ingAnnotations(ing.GetAnnotations()).parseInt(v)
+}
+
+// GetIntAnnotationFromMCI extracts an int from an MultiClusterIngress annotation
+func GetIntAnnotationFromMCI(name string, mci *karmadanetworking.MultiClusterIngress) (int, error) {
+	v := GetAnnotationWithPrefix(name)
+	err := checkAnnotationWithMCi(v, mci)
+	if err != nil {
+		return 0, err
+	}
+	return ingAnnotations(mci.GetAnnotations()).parseInt(v)
 }
 
 // GetAnnotationWithPrefix returns the prefix of ingress annotations
@@ -156,6 +200,23 @@ func AnnotationsReferencesConfigmap(ing *networking.Ingress) bool {
 
 	return false
 }
+
+// AnnotationsReferencesConfigmapFromMCI checks if at least one annotation in the MultiClusterIngress rule
+// references a configmap.
+func AnnotationsReferencesConfigmapFromMCI(mci *karmadanetworking.MultiClusterIngress) bool {
+	if mci == nil || len(mci.GetAnnotations()) == 0 {
+		return false
+	}
+
+	for name := range mci.GetAnnotations() {
+		if configmapAnnotations.Has(name) {
+			return true
+		}
+	}
+
+	return false
+}
+
 
 // StringToURL parses the provided string into URL and returns error
 // message in case of failure

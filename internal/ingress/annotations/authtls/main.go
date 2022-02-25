@@ -18,9 +18,10 @@ package authtls
 
 import (
 	"fmt"
-	networking "k8s.io/api/networking/v1"
-
 	"regexp"
+
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
+	networking "k8s.io/api/networking/v1"
 
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	ing_errors "k8s.io/ingress-nginx/internal/ingress/errors"
@@ -123,6 +124,52 @@ func (a authTLS) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	config.PassCertToUpstream, err = parser.GetBoolAnnotation("auth-tls-pass-certificate-to-upstream", ing)
+	if err != nil {
+		config.PassCertToUpstream = false
+	}
+
+	return config, nil
+}
+
+// ParseByMCI parses the annotations contained in the multiclusteringress
+// rule used to use a Certificate as authentication method
+func (a authTLS) ParseByMCI(mci *karmadanetworking.MultiClusterIngress) (interface{}, error) {
+	var err error
+	config := &Config{}
+
+	tlsauthsecret, err := parser.GetStringAnnotationFromMCI("auth-tls-secret", mci)
+	if err != nil {
+		return &Config{}, err
+	}
+
+	_, _, err = k8s.ParseNameNS(tlsauthsecret)
+	if err != nil {
+		return &Config{}, ing_errors.NewLocationDenied(err.Error())
+	}
+
+	authCert, err := a.r.GetAuthCertificate(tlsauthsecret)
+	if err != nil {
+		e := fmt.Errorf("error obtaining certificate: %w", err)
+		return &Config{}, ing_errors.LocationDenied{Reason: e}
+	}
+	config.AuthSSLCert = *authCert
+
+	config.VerifyClient, err = parser.GetStringAnnotationFromMCI("auth-tls-verify-client", mci)
+	if err != nil || !authVerifyClientRegex.MatchString(config.VerifyClient) {
+		config.VerifyClient = defaultAuthVerifyClient
+	}
+
+	config.ValidationDepth, err = parser.GetIntAnnotationFromMCI("auth-tls-verify-depth", mci)
+	if err != nil || config.ValidationDepth == 0 {
+		config.ValidationDepth = defaultAuthTLSDepth
+	}
+
+	config.ErrorPage, err = parser.GetStringAnnotationFromMCI("auth-tls-error-page", mci)
+	if err != nil {
+		config.ErrorPage = ""
+	}
+
+	config.PassCertToUpstream, err = parser.GetBoolAnnotationFromMCI("auth-tls-pass-certificate-to-upstream", mci)
 	if err != nil {
 		config.PassCertToUpstream = false
 	}
