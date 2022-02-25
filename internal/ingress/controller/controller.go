@@ -1061,7 +1061,7 @@ func (n *NGINXController) serviceEndpoints(svcKey, backendPort string) ([]ingres
 			return upstreams, nil
 		}
 		servicePort := externalNamePorts(backendPort, svc)
-		endps := getEndpoints(svc, servicePort, apiv1.ProtocolTCP, n.store.GetServiceEndpoints)
+		endps := getEndpointsByEps(svc, servicePort, apiv1.ProtocolTCP, n.store.GetServiceEndpointSlices)
 		if len(endps) == 0 {
 			klog.Warningf("Service %q does not have any active Endpoint.", svcKey)
 			return upstreams, nil
@@ -1078,7 +1078,7 @@ func (n *NGINXController) serviceEndpoints(svcKey, backendPort string) ([]ingres
 			servicePort.TargetPort.String() == backendPort ||
 			servicePort.Name == backendPort {
 
-			endps := getEndpoints(svc, &servicePort, apiv1.ProtocolTCP, n.store.GetServiceEndpoints)
+			endps := getEndpointsByEps(svc, &servicePort, apiv1.ProtocolTCP, n.store.GetServiceEndpointSlices)
 			if len(endps) == 0 {
 				klog.Warningf("Service %q does not have any active Endpoint.", svcKey)
 			}
