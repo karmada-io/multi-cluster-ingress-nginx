@@ -97,7 +97,7 @@ kind load docker-image --name="${KIND_CLUSTER_NAME}" "${DEV_IMAGE}"
 echo "[dev-env] deploying NGINX Ingress controller..."
 kubectl create namespace ingress-nginx &> /dev/null || true
 
-cat << EOF | helm template ingress-nginx ${DIR}/../charts/ingress-nginx --namespace=ingress-nginx --values - | kubectl apply -n ingress-nginx -f -
+cat << EOF | helm template ingress-nginx ${DIR}/../charts/ingress-nginx --namespace=ingress-nginx --values - | kubectl apply -n ingress-nginx --validate=false -f -
 controller:
   image:
     repository: ${REGISTRY}/controller
