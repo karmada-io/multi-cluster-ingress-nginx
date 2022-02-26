@@ -7,6 +7,7 @@ import (
 	"time"
 
 	karmadanetwork "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
+	"github.com/karmada-io/karmada/pkg/util/names"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -401,7 +402,7 @@ func (n *NGINXController) createUpstreamsFromMCIs(mcis []*ingress.MultiClusterIn
 				upstreams[defBackend].LoadBalancing = n.store.GetBackendConfiguration().LoadBalancing
 			}
 
-			svcKey := fmt.Sprintf("%v/%v", mci.Namespace, mci.Spec.DefaultBackend.Service.Name)
+			svcKey := fmt.Sprintf("%v/%v", mci.Namespace, names.GenerateDerivedServiceName(mci.Spec.DefaultBackend.Service.Name))
 
 			// add the service ClusterIP as a single Endpoint instead of individual Endpoints
 			if anns.ServiceUpstream {
@@ -473,7 +474,7 @@ func (n *NGINXController) createUpstreamsFromMCIs(mcis []*ingress.MultiClusterIn
 					upstreams[name].LoadBalancing = n.store.GetBackendConfiguration().LoadBalancing
 				}
 
-				svcKey := fmt.Sprintf("%v/%v", mci.Namespace, svcName)
+				svcKey := fmt.Sprintf("%v/%v", mci.Namespace, names.GenerateDerivedServiceName(svcName))
 
 				// add the service ClusterIP as a single Endpoint instead of individual Endpoints
 				if anns.ServiceUpstream {

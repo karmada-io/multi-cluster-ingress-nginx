@@ -2368,6 +2368,7 @@ func newNGINXController(t *testing.T) *NGINXController {
 	ns := v1.NamespaceDefault
 
 	clientSet := fake.NewSimpleClientset()
+	kubeClientSet := fake.NewSimpleClientset()
 	karmadaClientSet := karmadafake.NewSimpleClientset()
 
 	configMap := &v1.ConfigMap{
@@ -2401,6 +2402,7 @@ func newNGINXController(t *testing.T) *NGINXController {
 		"",
 		10*time.Minute,
 		clientSet,
+		kubeClientSet,
 		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,
@@ -2440,6 +2442,7 @@ func newDynamicNginxController(t *testing.T, setConfigMap func(string) *v1.Confi
 	ns := v1.NamespaceDefault
 
 	clientSet := fake.NewSimpleClientset()
+	kubeClientSet := fake.NewSimpleClientset()
 	karmadaClientSet := karmadafake.NewSimpleClientset()
 	configMap := setConfigMap(ns)
 
@@ -2467,6 +2470,7 @@ func newDynamicNginxController(t *testing.T, setConfigMap func(string) *v1.Confi
 		"",
 		10*time.Minute,
 		clientSet,
+		kubeClientSet,
 		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,

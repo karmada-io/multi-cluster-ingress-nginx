@@ -37,7 +37,7 @@ import (
 
 	proxyproto "github.com/armon/go-proxyproto"
 	"github.com/eapache/channels"
-        "github.com/karmada-io/karmada/pkg/util/gclient"
+	"github.com/karmada-io/karmada/pkg/util/gclient"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -129,6 +129,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector) *NGINXContro
 		config.DefaultSSLCertificate,
 		config.ResyncPeriod,
 		config.Client,
+		config.KarmadaKubeClient,
 		config.KarmadaClient,
 		n.updateCh,
 		config.DisableCatchAll,

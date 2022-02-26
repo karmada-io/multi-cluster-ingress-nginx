@@ -53,7 +53,7 @@ type Syncer interface {
 type ingressLister interface {
 	// ListIngresses returns the list of Ingresses
 	ListIngresses() []*ingress.Ingress
-    // ListMultiClusterIngresses returns the list of MultiClusterIngresses
+	// ListMultiClusterIngresses returns the list of MultiClusterIngresses
 	ListMultiClusterIngresses() []*ingress.MultiClusterIngress
 }
 

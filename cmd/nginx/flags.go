@@ -51,6 +51,9 @@ only when the flag --apiserver-host is specified.`)
 		kubeConfigFile = flags.String("kubeconfig", "",
 			`Path to a kubeconfig file containing authorization and API server information.`)
 
+		karmadaConfigFile = flags.String("karmada-kubeconfig", "",
+			`Path to a kubeconfig file containing authorization and API server information for Karmada.`)
+
 		defaultSvc = flags.String("default-backend-service", "",
 			`Service used to serve HTTP requests not matching any known server name (catch-all).
 Takes the form "namespace/name". The controller configures NGINX to forward
@@ -288,6 +291,7 @@ https://blog.maxmind.com/2019/12/18/significant-changes-to-accessing-and-using-g
 	config := &controller.Configuration{
 		APIServerHost:              *apiserverHost,
 		KubeConfigFile:             *kubeConfigFile,
+		KarmadaConfigFile:          *karmadaConfigFile,
 		UpdateStatus:               *updateStatus,
 		ElectionID:                 *electionID,
 		EnableProfiling:            *profiling,

@@ -73,10 +73,12 @@ func main() {
 		klog.Fatal(err)
 	}
 
-	kubeClient, karmadaClient, err := createApiserverClient(conf.APIServerHost, conf.RootCAFile, conf.KubeConfigFile)
+	kubeClient, err := createApiserverClient(conf.APIServerHost, conf.RootCAFile, conf.KubeConfigFile)
 	if err != nil {
 		handleFatalInitError(err)
 	}
+
+	karmadaKubeClient, karmadaClient, err := createKarmadaApiserverClient("", "", conf.KarmadaConfigFile)
 
 	if len(conf.DefaultService) > 0 {
 		err := checkService(conf.DefaultService, kubeClient)
@@ -95,7 +97,7 @@ func main() {
 	}
 
 	if conf.Namespace != "" {
-		_, err = kubeClient.CoreV1().Namespaces().Get(context.TODO(), conf.Namespace, metav1.GetOptions{})
+		_, err = karmadaKubeClient.CoreV1().Namespaces().Get(context.TODO(), conf.Namespace, metav1.GetOptions{})
 		if err != nil {
 			klog.Fatalf("No namespace with name %v found: %v", conf.Namespace, err)
 		}
@@ -108,7 +110,7 @@ func main() {
 		klog.Fatalf("ingress-nginx requires Kubernetes v1.19.0 or higher")
 	}
 
-	_, err = kubeClient.NetworkingV1().IngressClasses().List(context.TODO(), metav1.ListOptions{})
+	_, err = karmadaKubeClient.NetworkingV1().IngressClasses().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			if errors.IsForbidden(err) {
@@ -118,6 +120,7 @@ func main() {
 		}
 	}
 	conf.Client = kubeClient
+	conf.KarmadaKubeClient = karmadaKubeClient
 	conf.KarmadaClient = karmadaClient
 
 	err = k8s.GetIngressPod(kubeClient)
@@ -191,10 +194,10 @@ func handleSigterm(ngx *controller.NGINXController, exit exiter) {
 // If neither apiserverHost nor kubeConfig is passed in, we assume the
 // controller runs inside Kubernetes and fallback to the in-cluster config. If
 // the in-cluster config is missing or fails, we fallback to the default config.
-func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kubernetes.Clientset, *karmadaclientset.Clientset, error) {
+func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kubernetes.Clientset, error) {
 	cfg, err := clientcmd.BuildConfigFromFlags(apiserverHost, kubeConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// TODO: remove after k8s v1.22
@@ -226,12 +229,7 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 
 	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return nil, nil, err
-	}
-
-	karmadaClient, err := karmadaclientset.NewForConfig(cfg)
-	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var v *discovery.Info
@@ -263,7 +261,7 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 
 	// err is returned in case of timeout in the exponential backoff (ErrWaitTimeout)
 	if err != nil {
-		return nil, nil, lastErr
+		return nil, lastErr
 	}
 
 	// this should not happen, warn the user
@@ -280,7 +278,39 @@ func createApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kuber
 		"platform", v.Platform,
 	)
 
-	return client, karmadaClient, nil
+	return client, nil
+}
+
+func createKarmadaApiserverClient(apiserverHost, rootCAFile, kubeConfig string) (*kubernetes.Clientset, *karmadaclientset.Clientset, error) {
+	cfg, err := clientcmd.BuildConfigFromFlags(apiserverHost, kubeConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if apiserverHost != "" && rootCAFile != "" {
+		tlsClientConfig := rest.TLSClientConfig{}
+
+		if _, err := certutil.NewPool(rootCAFile); err != nil {
+			klog.ErrorS(err, "Loading CA config", "file", rootCAFile)
+		} else {
+			tlsClientConfig.CAFile = rootCAFile
+		}
+
+		cfg.TLSClientConfig = tlsClientConfig
+	}
+	klog.InfoS("Creating karmada API client", "host", cfg.Host)
+
+	kubeClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	karmadaClient, err := karmadaclientset.NewForConfig(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return kubeClient, karmadaClient, nil
 }
 
 // Handler for fatal init errors. Prints a verbose error message and exits.

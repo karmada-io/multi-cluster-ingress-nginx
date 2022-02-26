@@ -58,10 +58,12 @@ type Configuration struct {
 	APIServerHost string
 	RootCAFile    string
 
-	KubeConfigFile string
+	KubeConfigFile    string
+	KarmadaConfigFile string
 
-	Client        clientset.Interface
-	KarmadaClient karmadaclientset.Interface
+	Client            clientset.Interface
+	KarmadaKubeClient clientset.Interface
+	KarmadaClient     karmadaclientset.Interface
 
 	ResyncPeriod time.Duration
 
