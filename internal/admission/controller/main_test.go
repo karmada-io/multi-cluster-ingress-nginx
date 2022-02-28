@@ -56,7 +56,10 @@ func (tc testChecker) CheckIngress(ing *networking.Ingress) error {
 }
 
 func (tc testChecker) CheckMCI(mci *karmadanetworking.MultiClusterIngress) error {
-	return nil
+	if mci.ObjectMeta.Name != testIngressName {
+		tc.t.Errorf("CheckMCI should be called with %v multiclusteringress, but got %v", testIngressName, mci.ObjectMeta.Name)
+	}
+	return tc.err
 }
 
 func TestHandleAdmission(t *testing.T) {
@@ -80,7 +83,7 @@ func TestHandleAdmission(t *testing.T) {
 
 	result, err = adm.HandleAdmission(&admissionv1.AdmissionReview{
 		Request: &admissionv1.AdmissionRequest{
-			Kind: v1.GroupVersionKind{Group: networking.GroupName, Version: "v1", Kind: "Ingress"},
+			Kind: v1.GroupVersionKind{Group: karmadanetworking.GroupName, Version: "v1alpha1", Kind: "MultiClusterIngress"},
 			Object: runtime.RawExtension{
 				Raw: []byte{0xff},
 			},
@@ -99,7 +102,7 @@ func TestHandleAdmission(t *testing.T) {
 		t.Fatalf("when the request object is not decodable, the request should not be allowed")
 	}
 
-	raw, err := json.Marshal(networking.Ingress{ObjectMeta: v1.ObjectMeta{Name: testIngressName}})
+	raw, err := json.Marshal(karmadanetworking.MultiClusterIngress{ObjectMeta: v1.ObjectMeta{Name: testIngressName}})
 	if err != nil {
 		t.Fatalf("failed to prepare test ingress data: %v", err.Error())
 	}

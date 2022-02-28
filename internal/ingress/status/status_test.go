@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	karmadanetworking "github.com/karmada-io/karmada/pkg/apis/networking/v1alpha1"
+	testkarmadaclient "github.com/karmada-io/karmada/pkg/generated/clientset/versioned/fake"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -187,12 +189,69 @@ func buildSimpleClientSet() *testclient.Clientset {
 	)
 }
 
+func buildSimpleKarmadaClientSet() *testkarmadaclient.Clientset {
+	return testkarmadaclient.NewSimpleClientset(
+		&karmadanetworking.MultiClusterIngressList{Items: buildExtensionsMultiClusterIngresses()},
+	)
+}
+
 func fakeSynFn(interface{}) error {
 	return nil
 }
 
 func buildExtensionsIngresses() []networking.Ingress {
 	return []networking.Ingress{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo_ingress_1",
+				Namespace: apiv1.NamespaceDefault,
+			},
+			Status: networking.IngressStatus{
+				LoadBalancer: apiv1.LoadBalancerStatus{
+					Ingress: []apiv1.LoadBalancerIngress{
+						{
+							IP:       "10.0.0.1",
+							Hostname: "foo1",
+						},
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo_ingress_different_class",
+				Namespace: metav1.NamespaceDefault,
+				Annotations: map[string]string{
+					ingressclass.IngressKey: "no-nginx",
+				},
+			},
+			Status: networking.IngressStatus{
+				LoadBalancer: apiv1.LoadBalancerStatus{
+					Ingress: []apiv1.LoadBalancerIngress{
+						{
+							IP:       "0.0.0.0",
+							Hostname: "foo.bar.com",
+						},
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo_ingress_2",
+				Namespace: apiv1.NamespaceDefault,
+			},
+			Status: networking.IngressStatus{
+				LoadBalancer: apiv1.LoadBalancerStatus{
+					Ingress: []apiv1.LoadBalancerIngress{},
+				},
+			},
+		},
+	}
+}
+
+func buildExtensionsMultiClusterIngresses() []karmadanetworking.MultiClusterIngress {
+	return []karmadanetworking.MultiClusterIngress{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "foo_ingress_1",
@@ -271,7 +330,28 @@ func (til *testIngressLister) ListIngresses() []*ingress.Ingress {
 }
 
 func (til *testIngressLister) ListMultiClusterIngresses() []*ingress.MultiClusterIngress {
-	return nil
+	var mcis []*ingress.MultiClusterIngress
+	mcis = append(mcis, &ingress.MultiClusterIngress{
+		MultiClusterIngress: karmadanetworking.MultiClusterIngress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo_ingress_non_01",
+				Namespace: apiv1.NamespaceDefault,
+			}}})
+
+	mcis = append(mcis, &ingress.MultiClusterIngress{
+		MultiClusterIngress: karmadanetworking.MultiClusterIngress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo_ingress_1",
+				Namespace: apiv1.NamespaceDefault,
+			},
+			Status: networking.IngressStatus{
+				LoadBalancer: apiv1.LoadBalancerStatus{
+					Ingress: buildLoadBalancerIngressByIP(),
+				},
+			},
+		}})
+
+	return mcis
 }
 
 func buildIngressLister() ingressLister {
@@ -295,6 +375,7 @@ func TestStatusActions(t *testing.T) {
 	os.Setenv("POD_NAMESPACE", apiv1.NamespaceDefault)
 	c := Config{
 		Client:                 buildSimpleClientSet(),
+		KarmadaClient:          buildSimpleKarmadaClientSet(),
 		PublishService:         "",
 		IngressLister:          buildIngressLister(),
 		UpdateStatusOnShutdown: true,
@@ -332,7 +413,8 @@ func TestStatusActions(t *testing.T) {
 	newIPs := []apiv1.LoadBalancerIngress{{
 		IP: "11.0.0.2",
 	}}
-	fooIngress1, err1 := fk.Client.NetworkingV1().Ingresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
+	fooIngress1, err1 := fk.KarmadaClient.NetworkingV1alpha1().MultiClusterIngresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
+	//fooIngress1, err1 := fk.Client.NetworkingV1().Ingresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
 	if err1 != nil {
 		t.Fatalf("unexpected error")
 	}
@@ -347,7 +429,8 @@ func TestStatusActions(t *testing.T) {
 	fk.Shutdown()
 	// ingress should be empty
 	newIPs2 := []apiv1.LoadBalancerIngress{}
-	fooIngress2, err2 := fk.Client.NetworkingV1().Ingresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
+	//fooIngress2, err2 := fk.Client.NetworkingV1().Ingresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
+	fooIngress2, err2 := fk.KarmadaClient.NetworkingV1alpha1().MultiClusterIngresses(apiv1.NamespaceDefault).Get(context.TODO(), "foo_ingress_1", metav1.GetOptions{})
 	if err2 != nil {
 		t.Fatalf("unexpected error")
 	}
@@ -356,7 +439,8 @@ func TestStatusActions(t *testing.T) {
 		t.Fatalf("returned %v but expected %v", fooIngress2CurIPs, newIPs2)
 	}
 
-	oic, err := fk.Client.NetworkingV1().Ingresses(metav1.NamespaceDefault).Get(context.TODO(), "foo_ingress_different_class", metav1.GetOptions{})
+	//oic, err := fk.Client.NetworkingV1().Ingresses(metav1.NamespaceDefault).Get(context.TODO(), "foo_ingress_different_class", metav1.GetOptions{})
+	oic, err := fk.KarmadaClient.NetworkingV1alpha1().MultiClusterIngresses(metav1.NamespaceDefault).Get(context.TODO(), "foo_ingress_different_class", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error")
 	}
