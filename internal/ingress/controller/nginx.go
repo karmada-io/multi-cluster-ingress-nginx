@@ -133,6 +133,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector) *NGINXContro
 		config.KarmadaClient,
 		n.updateCh,
 		config.DisableCatchAll,
+		config.DeepInspector,
 		config.IngressClassConfiguration)
 
 	n.syncQueue = task.NewTaskQueue(n.syncIngress)

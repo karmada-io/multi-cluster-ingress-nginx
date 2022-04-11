@@ -143,6 +143,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -225,6 +226,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -330,6 +332,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -447,6 +450,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			ingressClassconfig)
 
 		storer.Run(stopCh)
@@ -578,6 +582,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			ingressClassconfig)
 
 		storer.Run(stopCh)
@@ -679,6 +684,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -774,6 +780,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -861,6 +868,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -958,6 +966,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -1083,6 +1092,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)
@@ -1205,6 +1215,7 @@ func TestStore(t *testing.T) {
 			karmadaClient,
 			updateCh,
 			false,
+			true,
 			DefaultClassConfig)
 
 		storer.Run(stopCh)

@@ -42,6 +42,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/controller/ingressclass"
 	"k8s.io/ingress-nginx/internal/ingress/controller/store"
 	"k8s.io/ingress-nginx/internal/ingress/errors"
+	"k8s.io/ingress-nginx/internal/ingress/inspector"
 	"k8s.io/ingress-nginx/internal/k8s"
 	"k8s.io/ingress-nginx/internal/nginx"
 	"k8s.io/klog/v2"
@@ -121,6 +122,8 @@ type Configuration struct {
 	MonitorMaxBatchSize int
 
 	ShutdownGracePeriod int
+
+	DeepInspector bool
 }
 
 // GetPublishService returns the Service used to set the load-balancer status of Ingresses.
@@ -235,6 +238,11 @@ func (n *NGINXController) CheckIngress(ing *networking.Ingress) error {
 	// Skip checks if the ingress is marked as deleted
 	if !ing.DeletionTimestamp.IsZero() {
 		return nil
+	}
+	if n.cfg.DeepInspector {
+		if err := inspector.DeepInspect(ing); err != nil {
+			return fmt.Errorf("invalid object: %w", err)
+		}
 	}
 
 	if n.cfg.Namespace != "" && ing.ObjectMeta.Namespace != n.cfg.Namespace {
