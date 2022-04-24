@@ -2406,6 +2406,7 @@ func newNGINXController(t *testing.T) *NGINXController {
 		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,
+		true,
 		&ingressclass.IngressClassConfiguration{
 			Controller:      "k8s.io/ingress-nginx",
 			AnnotationValue: "nginx",
@@ -2474,6 +2475,7 @@ func newDynamicNginxController(t *testing.T, setConfigMap func(string) *v1.Confi
 		karmadaClientSet,
 		channels.NewRingChannel(10),
 		false,
+		true,
 		&ingressclass.IngressClassConfiguration{
 			Controller:      "k8s.io/ingress-nginx",
 			AnnotationValue: "nginx",

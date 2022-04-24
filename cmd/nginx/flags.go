@@ -195,6 +195,8 @@ Takes the form "<host>:port". If not provided, no admission controller is starte
 		statusUpdateInterval = flags.Int("status-update-interval", status.UpdateInterval, "Time interval in seconds in which the status should check if an update is required. Default is 60 seconds")
 
 		shutdownGracePeriod = flags.Int("shutdown-grace-period", 0, "Seconds to wait after receiving the shutdown signal, before stopping the nginx process.")
+
+		deepInspector = flags.Bool("deep-inspect", true, "Enables ingress object security deep inspector")
 	)
 
 	flags.StringVar(&nginx.MaxmindMirror, "maxmind-mirror", "", `Maxmind mirror url (example: http://geoip.local/databases`)
@@ -309,6 +311,7 @@ https://blog.maxmind.com/2019/12/18/significant-changes-to-accessing-and-using-g
 		UDPConfigMapName:           *udpConfigMapName,
 		DisableFullValidationTest:  *disableFullValidationTest,
 		DefaultSSLCertificate:      *defSSLCertificate,
+		DeepInspector:              *deepInspector,
 		PublishService:             *publishSvc,
 		PublishStatusAddress:       *publishStatusAddress,
 		UpdateStatusOnShutdown:     *updateStatusOnShutdown,
