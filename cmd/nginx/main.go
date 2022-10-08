@@ -357,8 +357,9 @@ func registerProfiler() {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("127.0.0.1:%v", nginx.ProfilerPort),
-		Handler: mux,
+		Addr:              fmt.Sprintf("127.0.0.1:%v", nginx.ProfilerPort),
+		ReadHeaderTimeout: 10 * time.Second,
+		Handler:           mux,
 	}
 	klog.Fatal(server.ListenAndServe())
 }
