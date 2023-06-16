@@ -122,6 +122,6 @@ cat <<EOF
 
 Kubernetes cluster ready and ingress-nginx listening in localhost using ports 80 and 443
 
-To delete the dev cluster execute: 'kind delete cluster --name ingress-nginx-dev'
+To delete the dev cluster execute: 'kind delete cluster --name ${KIND_CLUSTER_NAME}'
 
 EOF
