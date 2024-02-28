@@ -100,7 +100,8 @@ kubectl create namespace ingress-nginx &> /dev/null || true
 cat << EOF | helm template ingress-nginx ${DIR}/../charts/ingress-nginx --namespace=ingress-nginx --values - | kubectl apply -n ingress-nginx --validate=false -f -
 controller:
   image:
-    repository: ${REGISTRY}/controller
+    registry: gcr.io
+    image: ${REGISTRY}/controller
     tag: ${TAG}
     digest:
   config:
